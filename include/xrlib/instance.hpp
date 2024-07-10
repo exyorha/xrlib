@@ -28,8 +28,8 @@ namespace xrlib
 		~CInstance();
 
 		XrResult Init( 
-			std::vector< const char * > vecInstanceExtensions, 
-			std::vector< const char * > vecAPILayers,
+			std::vector< const char * > &vecInstanceExtensions, 
+			std::vector< const char * > &vecAPILayers,
 			const XrInstanceCreateFlags createFlags = 0,
 			const void *pNext = nullptr	);
 
@@ -47,13 +47,13 @@ namespace xrlib
 
 		XrResult GetSupportedExtensions( std::vector< std::string > &outExtensions, const char *pcharApiLayerName = nullptr );
 
-		XrResult FilterForSupportedExtensions( std::vector< std::string > &vecRequestedExtensionNames );
+		XrResult RemoveUnsupportedExtensions( std::vector< std::string > &vecRequestedExtensionNames );
 
-		XrResult FilterOutUnsupportedExtensions( std::vector< const char * > &vecExtensionNames );
+		XrResult RemoveUnsupportedExtensions( std::vector< const char * > &vecExtensionNames );
 
-		XrResult FilterOutUnsupportedApiLayers( std::vector< const char * > &vecApiLayerNames );
+		XrResult RemoveUnsupportedApiLayers( std::vector< const char * > &vecApiLayerNames );
 
-		void FilterOutUnsupportedGraphicsApis( std::vector< const char * > &vecExtensionNames );
+		void RemoveUnsupportedGraphicsApis( std::vector< const char * > &vecExtensionNames );
 
 		std::vector< XrViewConfigurationType > GetSupportedViewConfigurations();
 

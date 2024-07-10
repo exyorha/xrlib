@@ -45,8 +45,8 @@ namespace xrlib
 	}
 
 	XrResult CInstance::Init(
-		std::vector< const char * > vecInstanceExtensions,
-		std::vector< const char * > vecAPILayers,
+		std::vector< const char * > &vecInstanceExtensions,
+		std::vector< const char * > &vecAPILayers,
 		const XrInstanceCreateFlags createFlags,
 		const void *pNext ) 
 	{ 
@@ -84,8 +84,8 @@ namespace xrlib
 			LogVerbose( "", "This runtime supports %i available extensions:", vecExtensionProperties.size() );
 
 		// Remove any unsupported graphics api extensions from requested extensions (only Vulkan is supported)
-		FilterOutUnsupportedGraphicsApis( vecInstanceExtensions );
-		FilterOutUnsupportedExtensions( vecInstanceExtensions );
+		RemoveUnsupportedGraphicsApis( vecInstanceExtensions );
+		RemoveUnsupportedExtensions( vecInstanceExtensions );
 
 		// Get the supported extension names by the runtime so we can check for vulkan support
 		std::vector< std::string > vecSupportedExtensionNames;
@@ -124,7 +124,7 @@ namespace xrlib
 			LogVerbose( "", "There are %i openxr api layers available:", vecApiLayerProperties.size() );
 
 		// Prepare app requested api layers
-		FilterOutUnsupportedApiLayers( vecAPILayers );
+		RemoveUnsupportedApiLayers( vecAPILayers );
 
 		// Cache enabled api layers
 		for ( auto &xrApiLayerProperty : vecApiLayerProperties )
@@ -307,7 +307,7 @@ namespace xrlib
 		return xrResult;
 	}
 
-	XrResult CInstance::FilterForSupportedExtensions( std::vector< std::string > &vecRequestedExtensionNames ) 
+	XrResult CInstance::RemoveUnsupportedExtensions( std::vector< std::string > &vecRequestedExtensionNames ) 
 	{ 
 		// Get supported extensions from active runtime
 		std::vector< std::string > vecSupportedExtensions;
@@ -342,7 +342,7 @@ namespace xrlib
 		return xrResult;
 	}
 
-	XrResult CInstance::FilterOutUnsupportedExtensions( std::vector< const char * > &vecExtensionNames ) 
+	XrResult CInstance::RemoveUnsupportedExtensions( std::vector< const char * > &vecExtensionNames ) 
 	{ 
 		std::vector< XrExtensionProperties > vecSupportedExtensions;
 		XR_RETURN_ON_ERROR( GetSupportedExtensions( vecSupportedExtensions ) )
@@ -370,7 +370,7 @@ namespace xrlib
 		return XR_SUCCESS;
 	}
 
-	XrResult CInstance::FilterOutUnsupportedApiLayers( std::vector< const char * > &vecApiLayerNames ) 
+	XrResult CInstance::RemoveUnsupportedApiLayers( std::vector< const char * > &vecApiLayerNames ) 
 	{ 
 		std::vector< XrApiLayerProperties > vecSupportedApiLayers;
 		XR_RETURN_ON_ERROR( GetSupportedApiLayers( vecSupportedApiLayers ) )
@@ -398,7 +398,7 @@ namespace xrlib
 		return XR_SUCCESS;
 	}
 
-	void CInstance::FilterOutUnsupportedGraphicsApis( std::vector< const char * > &vecExtensionNames ) 
+	void CInstance::RemoveUnsupportedGraphicsApis( std::vector< const char * > &vecExtensionNames ) 
 	{
 		// @todo - capture from openxr_platform.h
 		std::vector< const char * > vecUnsupportedGraphicsApis { "XR_KHR_opengl_enable", "XR_KHR_opengl_es_enable", "XR_KHR_D3D11_enable", "XR_KHR_D3D12_enable", "XR_MNDX_egl_enable" };

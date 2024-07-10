@@ -1,0 +1,48 @@
+# xrlib
+
+name: Android builds [ arm64-v8a, Debug|Release ]
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: android-arm64-v8a-${{ matrix.build_type }}-c++_shared
+
+      - name: Configure CMake on Android
+        run: |
+          cmake -S . -B build/ --toolchain $ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+          -D ANDROID_PLATFORM=26 \
+          -D CMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+          -D CMAKE_ANDROID_STL_TYPE=c++_shared \
+          -D ANDROID_NDK=$ANDROID_NDK_ROOT \
+          -D ANDROID_USE_LEGACY_TOOLCHAIN_FILE=NO \
+          -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -D BUILD_TESTS=OFF \
+          -D UPDATE_DEPS=ON \
+          -D BUILD_WERROR=ON
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+
+      - run: cmake --build build/
