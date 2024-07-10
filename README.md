@@ -1,5 +1,5 @@
 # xrlib
-[![Desktop builds [ Linux|Windows, Debug|Release, g++|clang++|cl ](https://github.com/1runeberg/xrlib/actions/workflows/desktop_builds.yml/badge.svg)](https://github.com/1runeberg/xrlib/actions/workflows/desktop_builds.yml) [![Android builds [ arm64-v8a, Debug|Release ](https://github.com/1runeberg/xrlib/actions/workflows/android_builds.yml/badge.svg)](https://github.com/1runeberg/xrlib/actions/workflows/android_builds.yml)
+[![Desktop builds [ Linux|Windows, Debug|Release, g++|clang++|cl ]](https://github.com/1runeberg/xrlib/actions/workflows/desktop_builds.yml/badge.svg)](https://github.com/1runeberg/xrlib/actions/workflows/desktop_builds.yml) &nbsp;&nbsp;[![Android builds [ arm64-v8a, Debug|Release ]](https://github.com/1runeberg/xrlib/actions/workflows/android_builds.yml/badge.svg)](https://github.com/1runeberg/xrlib/actions/workflows/android_builds.yml)
 
  C++20 OpenXR wrapper library designed to abstract the complexities of the OpenXR API while retaining its flexibility, allowing developers to focus on creating immersive experiences without getting bogged down by low-level details. The library is Vulkan-native and includes an optional PBR renderer, designed from the ground up with mixed reality in mind.
 

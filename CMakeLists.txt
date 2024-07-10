@@ -192,15 +192,17 @@ target_include_directories(${XRLIB} PUBLIC "${XRLIB_SRC}"
                            )
 # For Android, add the native app glue NDK directory
 if(ANDROID)
+    message(STATUS "[${XRLIB}] Android NDK path: ${ANDROID_NDK}")
+    
     # Add native app glue
-    find_path(ANDROID_NATIVE_APP_GLUE NAMES android_native_app_glue.h PATHS ${ANDROID_NDK}/sources/android/native_app_glue)
+    find_path(ANDROID_NATIVE_APP_GLUE NAMES android_native_app_glue.h PATHS "${ANDROID_NDK}/sources/android/native_app_glue" NO_DEFAULT_PATH)
 
     if(NOT ANDROID_NATIVE_APP_GLUE)
-        message(FATAL_ERROR "[${XRLIB}] ERROR: Unable to find native_app_glue in:  ${ANDROID_APP_GLUE}")
+        message(WARNING "[${XRLIB}] WARNING: Unable to find native_app_glue in:  **${ANDROID_NDK}/sources/android/native_app_glue** setting manually.")
+        set(ANDROID_NATIVE_APP_GLUE "${ANDROID_NDK}/sources/android/native_app_glue")
     endif()
 
     target_include_directories(${XRLIB} PUBLIC ${ANDROID_NATIVE_APP_GLUE})
-    target_compile_definitions(${XRLIB} PRIVATE XR_USE_PLATFORM_ANDROID=1)
 endif()
 
 message(STATUS "[${XRLIB}] Public include directories defined.")
