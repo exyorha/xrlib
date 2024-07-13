@@ -9,4 +9,3 @@
 
 #include <xrlib/session.hpp>
 #include <xrlib/vulkan.hpp>
-

@@ -13,7 +13,7 @@ set(CMAKE_SUPPRESS_REGENERATION true)
 
 # Set project variables
 set(XRLIB "xrlib")
-project("${XRLIB}" VERSION 1.0.0)
+project("${XRLIB}" VERSION 1.0.0.0)
 
 # Set project directories
 set(XRLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -22,6 +22,7 @@ set(XRLIB_INCLUDE "${XRLIB_ROOT}/include")
 set(XRLIB_BIN_OUT "${XRLIB_ROOT}/bin")
 set(XRLIB_LIB_OUT "${XRLIB_ROOT}/lib")
 set(THIRD_PARTY "${XRLIB_ROOT}/third_party")
+set(OPENXR_INCLUDE "${THIRD_PARTY}/openxr/include")
 
 set(XRVK_INCLUDE "${XRLIB_INCLUDE}/xrvk")
 set(XRVK_SRC "${XRLIB_SRC}/xrvk")
@@ -29,6 +30,14 @@ set(XRVK_SRC "${XRLIB_SRC}/xrvk")
 # Set project configuration files
 set(XRLIB_CONFIG_IN "${XRLIB_ROOT}/project_config.h.in")
 set(XRLIB_CONFIG_OUT "${XRLIB_INCLUDE}/project_config.h")
+
+# For windows, we need to override openxr's resource script, so define the rc files here which will be used during binary pre-build
+if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+    set(SRC_RC "${CMAKE_CURRENT_SOURCE_DIR}/win_dll_metadata.rc")
+    set(DST_RC "${CMAKE_CURRENT_SOURCE_DIR}/third_party/openxr/src/loader/loader.rc")
+
+    execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${SRC_RC} ${DST_RC})
+endif()
 
 # Set config files
 file(GLOB XRLIB_CONFIG
@@ -188,6 +197,7 @@ target_include_directories(${XRLIB} PUBLIC "${XRLIB_SRC}"
                                            "${XRLIB_INCLUDE}"
                                            "${XRLIB_ROOT}"
                                            "${THIRD_PARTY}"
+                                           "${OPENXR_INCLUDE}"
                                            "${Vulkan_INCLUDE_DIRS}"
                            )
 # For Android, add the native app glue NDK directory
@@ -224,17 +234,13 @@ if(ANDROID)
 
     find_library(ANDROID_LIBRARY NAMES android)
     find_library(ANDROID_LOG_LIBRARY NAMES log)
-    target_link_libraries(
-                          ${XRLIB} PUBLIC 
-                          openxr_loader
+    target_link_libraries(${XRLIB} PUBLIC 
                           ${Vulkan_LIBRARY}
                           ${ANDROID_LIBRARY} 
                           ${ANDROID_LOG_LIBRARY}
                          )
 else()
-    target_link_libraries(
-                          ${XRLIB} PUBLIC 
-                          openxr_loader
+    target_link_libraries(${XRLIB} PUBLIC 
                           ${Vulkan_LIBRARY}
                          )
 endif()
@@ -262,8 +268,7 @@ message(STATUS "[${XRLIB}] Project libraries will be built in: ${XRLIB_LIB_OUT}"
 message(STATUS "[${XRLIB}] Project binaries will be built in: ${XRLIB_BIN_OUT}")
 
 # Post-Build
-add_custom_command(
-                    TARGET ${XRLIB} POST_BUILD
+add_custom_command(TARGET ${XRLIB} POST_BUILD
 
                     # Create output directories
                     COMMAND ${CMAKE_COMMAND} -E make_directory "${XRLIB_LIB_OUT}"
