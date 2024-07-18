@@ -1,0 +1,102 @@
+# xrlib
+# Vulkan is installed on the runner prior to compilation
+
+name: _src_desktop_builds
+
+on:
+  workflow_call:
+    inputs:
+      matrix-json:
+        description: 'Build matrix json'
+        required: true
+        type: string
+      build-as-static:
+        description: 'Whether to build as a static library (ON/OFF)'
+        required: true
+        type: string
+      export-artifacts:
+        description: 'Whether to export artifacts (ON/OFF)'
+        required: true
+        type: string
+
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(inputs['matrix-json']) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+          
+      - name: Archive source code
+        if: ${{ (inputs.export-artifacts == 'ON') && (matrix.os == 'windows-latest') && (inputs.build-as-static == 'OFF') && (matrix.enable_xrvk == 'ON') }}
+        uses: actions/upload-artifact@v4
+        with:
+            name: xrlib-source
+            path: ./
+
+      - name: Set reusable strings
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@main
+        with:
+          vulkan-query-version: 1.3.204.0
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Configure CMake on Linux
+        if: runner.os == 'Linux'
+        run: |
+          cmake -B ${{ steps.strings.outputs.build-output-dir }} \
+                -D CMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
+                -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -D BUILD_AS_STATIC=${{ inputs.build-as-static }} \
+                -D ENABLE_XRVK=${{ matrix.enable_xrvk }} \
+                -S ${{ github.workspace }}
+
+      - name: Configure CMake on Windows
+        if: runner.os == 'Windows'
+        run: |
+          cmake -B ${{ steps.strings.outputs.build-output-dir }} `
+                -D CMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} `
+                -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+                -D BUILD_AS_STATIC=${{ inputs.build-as-static }} `
+                -D ENABLE_XRVK=${{ matrix.enable_xrvk }} `
+                -S ${{ github.workspace }}
+
+      - name: Build xrlib
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+
+      - name: Upload build artifact (windows dll & symbol exports)
+        if: ${{ inputs.export-artifacts == 'ON' && (matrix.os == 'windows-latest') &&  (inputs.build-as-static == 'OFF') }}
+        uses: actions/upload-artifact@v4
+        with:
+            name: xrlib-${{ matrix.os }}_compiler_${{ matrix.cpp_compiler }}_static_${{ inputs.build-as-static }}-xrvk_${{ matrix.enable_xrvk }}
+            path: |
+               bin
+               lib
+
+      - name: Upload build artifact (windows static)
+        if: ${{ inputs.export-artifacts == 'ON' && (matrix.os == 'windows-latest') && (inputs.build-as-static == 'ON') }}
+        uses: actions/upload-artifact@v4
+        with:
+            name: xrlib-${{ matrix.os }}_compiler_${{ matrix.cpp_compiler }}_static_${{ inputs.build-as-static }}-xrvk_${{ matrix.enable_xrvk }}
+            path: lib
+
+      - name: Upload build artifact (linux)
+        if: ${{ inputs.export-artifacts == 'ON' && (matrix.os == 'ubuntu-latest') }}
+        uses: actions/upload-artifact@v4
+        with:
+            name: xrlib-${{ matrix.os }}_compiler_${{ matrix.cpp_compiler }}_static_${{ inputs.build-as-static }}-xrvk_${{ matrix.enable_xrvk }}
+            path: lib

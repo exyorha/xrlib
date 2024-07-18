@@ -1,0 +1,90 @@
+# xrlib
+
+name: _src_android_builds
+
+on:
+  workflow_call:
+    inputs:
+      matrix-json:
+        description: 'Build matrix json'
+        required: true
+        type: string
+      build-as-static:
+        description: 'Whether to build as a static library (ON/OFF)'
+        required: true
+        type: string
+      export-artifacts:
+        description: 'Whether to export artifacts (ON/OFF)'
+        required: true
+        type: string
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix: ${{ fromJson(inputs['matrix-json']) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4.1.7
+        with:
+          submodules: recursive
+          fetch-depth: 1
+    
+      - name: Get cmake-latest
+        uses: lukka/get-cmake@latest
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: android-arm64-v8a-${{ matrix.build_type }}-c++_shared
+
+      - name: Configure CMake on Android (shared library)
+        if: ${{ inputs.build-as-static == 'OFF' }}
+        run: |
+          cmake -S . -B build/ --toolchain $ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+          -D ANDROID_PLATFORM=33 \
+          -D CMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+          -D CMAKE_ANDROID_STL_TYPE=c++_shared \
+          -D ANDROID_NDK=$ANDROID_NDK_ROOT \
+          -D ANDROID_USE_LEGACY_TOOLCHAIN_FILE=NO \
+          -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -D BUILD_AS_STATIC=OFF \
+          -D ENABLE_XRVK=${{ matrix.enable_xrvk }} \
+          -D BUILD_TESTS=OFF \
+          -D UPDATE_DEPS=ON \
+          -D BUILD_WERROR=ON
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+
+      - name: Configure CMake on Android (static library)
+        if: ${{ inputs.build-as-static == 'ON' }}
+        run: |
+          cmake -S . -B build/ --toolchain $ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake \
+          -D ANDROID_PLATFORM=33 \
+          -D CMAKE_ANDROID_ARCH_ABI=arm64-v8a \
+          -D CMAKE_ANDROID_STL_TYPE=c++_static \
+          -D ANDROID_NDK=$ANDROID_NDK_ROOT \
+          -D ANDROID_USE_LEGACY_TOOLCHAIN_FILE=NO \
+          -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -D BUILD_AS_STATIC=ON \
+          -D ENABLE_XRVK=${{ matrix.enable_xrvk }} \
+          -D BUILD_TESTS=OFF \
+          -D UPDATE_DEPS=ON \
+          -D BUILD_WERROR=ON
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+
+      - name: Build xrlib
+        run: cmake --build build/
+
+      - name: Upload build artifact
+        if: ${{ inputs.export-artifacts == 'ON' }}
+        uses: actions/upload-artifact@v4
+        with:
+            name: xrlib-static_${{ inputs.build-as-static }}-xrvk_${{ matrix.enable_xrvk }}
+            path: lib

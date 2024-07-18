@@ -1,0 +1,24 @@
+# xrlib
+
+name: windows-latest
+
+on:
+  push:
+    branches: ['**']  
+  pull_request:
+    branches: ['main']
+      
+
+jobs:
+    build:
+        uses: ./.github/workflows/_src_desktop_builds.yml
+        with:
+          matrix-json: >
+            {
+              "os": ["windows-latest"],
+              "build_type": ["debug", "release"],
+              "enable_xrvk": ["ON", "OFF"],
+              "cpp_compiler": ["cl"]
+            }
+          build-as-static : "OFF"
+          export-artifacts: "OFF"

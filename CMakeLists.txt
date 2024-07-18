@@ -22,7 +22,6 @@ set(XRLIB_INCLUDE "${XRLIB_ROOT}/include")
 set(XRLIB_BIN_OUT "${XRLIB_ROOT}/bin")
 set(XRLIB_LIB_OUT "${XRLIB_ROOT}/lib")
 set(THIRD_PARTY "${XRLIB_ROOT}/third_party")
-set(OPENXR_INCLUDE "${THIRD_PARTY}/openxr/include")
 
 set(XRVK_INCLUDE "${XRLIB_INCLUDE}/xrvk")
 set(XRVK_SRC "${XRLIB_SRC}/xrvk")
@@ -83,6 +82,9 @@ set(OPENXR_INCLUDE "${OPENXR_ROOT}/include")
 #######################
 # SET COMPILE OPTIONS #
 #######################
+
+# static build
+option(BUILD_AS_STATIC "Build as static library" OFF)
 
 # xrvk - pbr render module
 option(ENABLE_XRVK "Compile xrvk - pbr render module" ON)
@@ -189,8 +191,23 @@ if(ENABLE_XRVK)
 endif()
 
 # Add project header and source files to project (including statically linking openxr_loader object)
-add_library(${XRLIB} SHARED ${ALLSOURCE})
-message(STATUS "[${XRLIB}] Project library defined.")
+if(BUILD_AS_STATIC)
+    add_library(${XRLIB} STATIC ${ALLSOURCE})
+    message(STATUS "[${XRLIB}] Project library defined. Will build as: STATIC")
+else()
+    add_library(${XRLIB} SHARED ${ALLSOURCE})
+    message(STATUS "[${XRLIB}] Project library defined. Will build as: SHARED")
+endif()
+
+# For shared library builds, set project version
+if(NOT BUILD_AS_STATIC)
+    if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+        set_target_properties(${XRLIB} PROPERTIES VERSION ${PROJECT_VERSION})
+    # else()
+        # cmake 3.22 builds multiple copies with version and so version for desktops. commenting for now to avoid CI build duplicates.
+        # set_target_properties(${XRLIB} PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR})
+    endif()
+endif()
 
 # Set project public include headers
 target_include_directories(${XRLIB} PUBLIC "${XRLIB_SRC}"
