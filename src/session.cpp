@@ -147,7 +147,7 @@ namespace xrlib
 
 				int nEvents;
 				struct android_poll_source *androidPollSource;
-				if ( ALooper_pollAll( nTimeout, nullptr, &nEvents, (void **) &androidPollSource ) < 0 )
+				if ( ALooper_pollOnce( nTimeout, nullptr, &nEvents, (void **) &androidPollSource ) < 0 )
 				{
 					break;
 				}
