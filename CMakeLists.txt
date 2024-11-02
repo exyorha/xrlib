@@ -379,7 +379,7 @@ add_custom_command(TARGET ${XRLIB} POST_BUILD
 
                   
 # Compile shaders only if we're not in an android build
-if(BUILD_SHADERS)
+if(NOT ANDROID AND BUILD_SHADERS)
     add_custom_command(TARGET ${XRLIB} POST_BUILD
                             COMMAND ${CMAKE_COMMAND} --build . --target CompileShaders
                       )
