@@ -10,6 +10,9 @@
 **/bin/*
 **/lib/*
 
+# Exempt plugin resource binaries
+!res/**/bin/
+
 # Android auto-generated
 **/.cxx/
 **/.gradle/
