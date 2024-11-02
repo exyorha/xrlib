@@ -36,6 +36,7 @@ set(XRLIB_CONFIG_OUT "${XRLIB_INCLUDE}/project_config.h")
 
 # Set project wide options
 option(BUILD_AS_STATIC "Build as static library" OFF)
+option(BUILD_SHADERS "Build shaders in resource directory" ON)
 option(ENABLE_XRVK "Compile xrvk - pbr render module" ON)
 option(ENABLE_RENDERDOC "Enable renderdoc for render debugs" OFF) 
 option(ENABLE_VULKAN_DEBUG "Enable vulkan debugging" OFF) 
@@ -136,29 +137,31 @@ file(GLOB_RECURSE XRVK_SHADERS
 	)
 
 # Compile shaders
-set(SHADER_OUTPUT_FILES)
-foreach(SHADER ${XRVK_SHADERS})
-    # Get the filename with extension
-    get_filename_component(SHADER_NAME ${SHADER} NAME)
+if(BUILD_SHADERS)
+    set(SHADER_OUTPUT_FILES)
+    foreach(SHADER ${XRVK_SHADERS})
+        # Get the filename with extension
+        get_filename_component(SHADER_NAME ${SHADER} NAME)
 
-    # Define the output .spv file path
-    set(OUTPUT_FILE "${XRVK_SHADERS_BIN}/${SHADER_NAME}.spv") 
+        # Define the output .spv file path
+        set(OUTPUT_FILE "${XRVK_SHADERS_BIN}/${SHADER_NAME}.spv") 
 
-    # Add custom command to run glslc for each shader file
-    add_custom_command(
-        OUTPUT ${OUTPUT_FILE}
-        COMMAND glslc ${SHADER} -o ${OUTPUT_FILE}
-        COMMENT "Compiling ${SHADER} to ${OUTPUT_FILE}"
-        VERBATIM
-        DEPENDS ${SHADER}  # Check if the shader file has changed
-    )
+        # Add custom command to run glslc for each shader file
+        add_custom_command(
+            OUTPUT ${OUTPUT_FILE}
+            COMMAND glslc ${SHADER} -o ${OUTPUT_FILE}
+            COMMENT "Compiling ${SHADER} to ${OUTPUT_FILE}"
+            VERBATIM
+            DEPENDS ${SHADER}  # Check if the shader file has changed
+        )
 
-    # Collect all output files
-    list(APPEND SHADER_OUTPUT_FILES ${OUTPUT_FILE})
-endforeach()
+        # Collect all output files
+        list(APPEND SHADER_OUTPUT_FILES ${OUTPUT_FILE})
+    endforeach()
 
-# Create a custom target that depends on all shader output files
-add_custom_target(CompileShaders ALL DEPENDS ${SHADER_OUTPUT_FILES})  
+    # Create a custom target that depends on all shader output files
+    add_custom_target(CompileShaders ALL DEPENDS ${SHADER_OUTPUT_FILES})  
+endif()
 
 # Set openxr
 set(OPENXR_ROOT "${THIRD_PARTY}/openxr")
@@ -376,7 +379,7 @@ add_custom_command(TARGET ${XRLIB} POST_BUILD
 
                   
 # Compile shaders only if we're not in an android build
-if(NOT ANDROID AND NOT DEFINED ENV{GITHUB_WORKFLOW})
+if(BUILD_SHADERS)
     add_custom_command(TARGET ${XRLIB} POST_BUILD
                             COMMAND ${CMAKE_COMMAND} --build . --target CompileShaders
                       )

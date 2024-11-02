@@ -51,6 +51,7 @@ jobs:
           -D ANDROID_NDK=$ANDROID_NDK_ROOT \
           -D ANDROID_USE_LEGACY_TOOLCHAIN_FILE=NO \
           -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -D BUILD_SHADERS=OFF \
           -D BUILD_AS_STATIC=OFF \
           -D ENABLE_XRVK=${{ matrix.enable_xrvk }} \
           -D BUILD_TESTS=OFF \
@@ -70,6 +71,7 @@ jobs:
           -D ANDROID_NDK=$ANDROID_NDK_ROOT \
           -D ANDROID_USE_LEGACY_TOOLCHAIN_FILE=NO \
           -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -D BUILD_SHADERS=OFF \
           -D BUILD_AS_STATIC=ON \
           -D ENABLE_XRVK=${{ matrix.enable_xrvk }} \
           -D BUILD_TESTS=OFF \

@@ -61,6 +61,7 @@ jobs:
           cmake -B ${{ steps.strings.outputs.build-output-dir }} \
                 -D CMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} \
                 -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -D BUILD_SHADERS=OFF \
                 -D BUILD_AS_STATIC=${{ inputs.build-as-static }} \
                 -D ENABLE_XRVK=${{ matrix.enable_xrvk }} \
                 -S ${{ github.workspace }}
@@ -71,6 +72,7 @@ jobs:
           cmake -B ${{ steps.strings.outputs.build-output-dir }} `
                 -D CMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} `
                 -D CMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+                -D BUILD_SHADERS=OFF `
                 -D BUILD_AS_STATIC=${{ inputs.build-as-static }} `
                 -D ENABLE_XRVK=${{ matrix.enable_xrvk }} `
                 -S ${{ github.workspace }}
