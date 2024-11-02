@@ -376,7 +376,7 @@ add_custom_command(TARGET ${XRLIB} POST_BUILD
 
                   
 # Compile shaders only if we're not in an android build
-if(NOT ANDROID AND NOT DEFINED ENV{GITHUB_ACTIONS})
+if(NOT ANDROID AND NOT DEFINED ENV{GITHUB_WORKFLOW})
     add_custom_command(TARGET ${XRLIB} POST_BUILD
                             COMMAND ${CMAKE_COMMAND} --build . --target CompileShaders
                       )
