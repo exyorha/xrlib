@@ -411,5 +411,19 @@ namespace xrlib
 		return false;
 	}
 
+	const bool CVulkan::IsStencilFormat( VkFormat vkFormat )
+	{
+		if ( vkFormat == VK_FORMAT_D32_SFLOAT || 
+			 vkFormat == VK_FORMAT_D16_UNORM_S8_UINT || 
+			 vkFormat == VK_FORMAT_D24_UNORM_S8_UINT ||
+			 vkFormat == VK_FORMAT_D32_SFLOAT_S8_UINT )
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+
 }
 

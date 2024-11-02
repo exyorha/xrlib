@@ -35,6 +35,51 @@ namespace xrlib
 	};
 
 	class CDeviceBuffer;
+	class CPlane2D
+	{
+	  public:
+		CPlane2D( CSession *pSession );
+		~CPlane2D();
+
+		XrSpace space = XR_NULL_HANDLE;
+		XrPosef pose = { { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } };
+		XrVector3f scale = { 1.f, 1.f, 1.f };
+
+		void AddTri( XrVector2f v1, XrVector2f v2, XrVector2f v3 );
+		void AddIndex( unsigned short index );
+		void AddVertex( XrVector2f vertex );
+
+		VkResult InitBuffers();
+
+		VkResult InitBuffer(
+			CDeviceBuffer *pBuffer,
+			VkBufferUsageFlags usageFlags,
+			VkDeviceSize unSize,
+			void *pData,
+			VkMemoryPropertyFlags memPropFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VkAllocationCallbacks *pCallbacks = nullptr );
+
+		void Reset();
+		void ResetIndices();
+		void ResetVertices();
+
+		CDeviceBuffer *GetIndexBuffer() { return m_pIndexBuffer; }
+		CDeviceBuffer *GetVertexBuffer() { return m_pVertexBuffer; }
+		std::vector< unsigned short > *GetIndices() { return &m_vecIndices; }
+		std::vector< XrVector2f > *GetVertices() { return &m_vecVertices; }
+
+	  protected:
+		CSession *m_pSession = nullptr;
+		CDeviceBuffer *m_pIndexBuffer = nullptr;
+		CDeviceBuffer *m_pVertexBuffer = nullptr;
+
+		std::vector< unsigned short > m_vecIndices;
+		std::vector< XrVector2f > m_vecVertices;
+
+		void DeleteBuffers();
+
+	};
+
 	class CPrimitive
 	{
 	  public:

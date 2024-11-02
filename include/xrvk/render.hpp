@@ -148,8 +148,8 @@ namespace xrlib
 	struct SRenderFrameInfo
 	{
 	  public:
-		float nearZ = 0.f;
-		float farZ = 100.f;
+		float nearZ = 0.1f;
+		float farZ = FLT_MAX;
 
 		float minDepth = 0.f;
 		float maxDepth = 1.f;
@@ -157,18 +157,31 @@ namespace xrlib
 		uint32_t unCurrentSwapchainImage_Color = 0;
 		uint32_t unCurrentSwapchainImage_Depth = 0;
 
+		SGraphicsPipelineLayout pipelineLayout = SGraphicsPipelineLayout( sizeof( XrMatrix4x4f ) * 2 ); // View-Projection matrix for each eye
+		std::vector<VkPipeline> stencilPipelines;
+		VkPipeline renderPipeline = VK_NULL_HANDLE;
+
 		XrFrameState frameState { XR_TYPE_FRAME_STATE };
 		XrViewState sharedEyeState { XR_TYPE_VIEW_STATE };
 		XrCompositionLayerProjection projectionLayer { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
-			
+		
 		XrVector3f eyeScale = { 1.0f, 1.0f, 1.0f };
+		XrPosef hmdPose;
+
 		std::array< XrMatrix4x4f, 2 > arrEyeVPs = {};
 
 		std::vector< XrMatrix4x4f > eyeProjectionMatrices = { XrMatrix4x4f(), XrMatrix4x4f() };
 		std::vector< XrMatrix4x4f > eyeViewMatrices = { XrMatrix4x4f(), XrMatrix4x4f() };
 		
 		std::vector< XrOffset2Di > imageRectOffsets = { { 0, 0 }, { 0, 0 } }; 
-		std::vector< VkClearValue > clearValues = { { 0.0f, 0.0f, 0.0f, 1.0f },{ 1.0f, 0 } };
+		std::vector< VkClearValue > clearValues = 
+		{
+			// Clear color attachment to black with full opacity
+			{ .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } },
+
+			// Clear depth attachment to maximum depth (1.0f) and stencil to 0
+			{ .depthStencil = { 1.0f, 0 } } 
+		};
 
 		std::vector< XrCompositionLayerProjectionView > projectionLayerViews = {
 			XrCompositionLayerProjectionView { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW },
@@ -195,15 +208,18 @@ namespace xrlib
 			minDepth( min ), 
 			maxDepth( max)
 		{
+			 XrPosef_CreateIdentity( &hmdPose );
 		};
 
 		SRenderFrameInfo() 
 		{ 
+			XrPosef_CreateIdentity( &hmdPose );
 		};
 
 		~SRenderFrameInfo() {};
 
 	};
+
 
 	class CStereoRender
 	{
@@ -246,12 +262,12 @@ namespace xrlib
 		XrResult CreateSwapchains( uint32_t unFaceCount = 1, uint32_t unMipCount = 1 );
 		XrResult CreateSwapchainImages( std::vector < XrSwapchainImageVulkan2KHR > &outSwapchainImages, XrSwapchain xrSwapchain );
 
-		XrResult CreateMainRenderPass( VkRenderPass &outRenderPass );
-		XrResult PrepareDefaultMultiviewRendering();
-		XrResult AddDefaultMultiviewRenderPass();
-		XrResult CreateDefaultMultiviewFramebuffers( VkRenderPass vkRenderPass );
+		XrResult CreateRenderPass( VkRenderPass &outRenderPass, bool bWithStencilSubpass );
+		XrResult InitRendering_Multiview();
+		XrResult CreateRenderPass_Multiview( bool bUseVisMask );
+		XrResult CreateFramebuffers_Multiview( VkRenderPass vkRenderPass );
 
-		XrResult CreateMultiviewRenderTargets( 
+		XrResult CreateRenderTargets_Multiview( 
 			VkImageViewCreateFlags colorCreateFlags = 0, 
 			VkImageViewCreateFlags depthCreateFlags = 0, 
 			void *pColorNext = nullptr,
@@ -396,6 +412,27 @@ namespace xrlib
 			const void *pNext = nullptr,
 			const VkAllocationCallbacks *pCallbacks = nullptr );
 
+		VkResult CreateGraphicsPipeline_Stencil(
+			#ifdef XR_USE_PLATFORM_ANDROID
+						AAssetManager *assetManager,
+			#endif
+			uint32_t unSubpassIndex,
+			VkPipeline &outPipeline,
+			SGraphicsPipelineLayout &pipelineLayout,
+			VkRenderPass vkRenderPass,
+			std::string sVertexShaderFilename,
+			std::string sFragmentShaderFilename );
+
+		VkResult CreateGraphicsPipeline_Stencils(
+			#ifdef XR_USE_PLATFORM_ANDROID
+						AAssetManager *assetManager,
+			#endif
+			std::vector< VkPipeline > &outPipelines,
+			SGraphicsPipelineLayout &pipelineLayout,
+			VkRenderPass vkRenderPass,
+			std::vector< std::string > vecVertexShaders,
+			std::vector< std::string > vecFragmentShaders );
+
 		VkResult CreateGraphicsPipeline_Primitives( 
 			#ifdef XR_USE_PLATFORM_ANDROID
 				AAssetManager *assetManager,
@@ -404,11 +441,15 @@ namespace xrlib
 			SGraphicsPipelineLayout &pipelineLayout, 
 			VkRenderPass vkRenderPass, 
 			std::string sVertexShaderFilename, 
-			std::string sFragmentShaderFilename 
+			std::string sFragmentShaderFilename
 		);
 
 		VkResult AddRenderPass( VkRenderPassCreateInfo *renderPassCI, VkAllocationCallbacks *pAllocator = nullptr );
-		void RenderFrame( VkRenderPass renderPass, SGraphicsPipelineLayout pipelineLayout, SRenderFrameInfo &renderInfo, std::vector< CColoredPrimitive * > &primitives );
+		void RenderFrame( 
+			VkRenderPass renderPass, 
+			SRenderFrameInfo &renderInfo, 
+			std::vector< CColoredPrimitive * > &primitives, 
+			std::vector< CPlane2D* > &stencils );
 
 		void BeginDraw(
 			const uint32_t unSwpachainImageIndex,
@@ -427,6 +468,8 @@ namespace xrlib
 		void BeginBufferUpdates( const uint32_t unSwpachainImageIndex );
 		void SubmitBufferUpdates( const uint32_t unSwpachainImageIndex );
 		void CalculateViewMatrices( std::vector< XrMatrix4x4f > &outViewMatrices, const XrVector3f *eyeScale );
+
+		const bool GetUseVisMask() { return m_bUseVisMask; }
 
 		const uint32_t GetTextureWidth() { return m_unTextureWidth; }
 		const uint32_t GetTextureHeight() { return m_unTextureHeight; }
@@ -469,6 +512,7 @@ namespace xrlib
 
 	  private:
 		CSession *m_pSession = nullptr;
+		bool m_bUseVisMask = false;
 
 		uint32_t m_unTextureWidth = 0;
 		uint32_t m_unTextureHeight = 0;

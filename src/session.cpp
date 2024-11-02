@@ -22,6 +22,9 @@ namespace xrlib
 		if ( m_xrAppSpace != XR_NULL_HANDLE )
 			xrDestroySpace( m_xrAppSpace );
 
+		if ( m_xrAppSpace != XR_NULL_HANDLE )
+			xrDestroySpace( m_xrHmdSpace );
+
 		if ( m_xrSession != XR_NULL_HANDLE )
 			xrDestroySession( m_xrSession );
 
@@ -70,6 +73,7 @@ namespace xrlib
 		XR_RETURN_ON_ERROR( InitVulkan( pSurface, pVkInstanceNext, pXrVkInstanceNext, pVkLogicalDeviceNext, pXrLogicalDeviceNext ) );
 		XR_RETURN_ON_ERROR( CreateXrSession( flgAdditionalCreateInfo ) );
 		XR_RETURN_ON_ERROR( CreateAppSpace( xrAppReferencePose, xrAppReferenceSpaceType ) );
+		XR_RETURN_ON_ERROR( CreateHmdSpace( xrAppReferencePose ) );
 
 		return XR_SUCCESS;
 	}
@@ -137,7 +141,22 @@ namespace xrlib
 		XR_RETURN_ON_ERROR( xrCreateReferenceSpace( m_xrSession, &xrReferenceSpaceCreateInfo, &m_xrAppSpace ) )
 
 		if ( CheckLogLevelDebug( m_pInstance->GetMinLogLevel() ) )
-			LogDebug( "", "Reference space of type (%s) created with handle (%" PRIu64 ").", XrEnumToString( xrAppReferenceSpaceType ), (uint64_t) m_xrAppSpace );
+			LogDebug( "", "Reference space for APP of type (%s) created with handle (%" PRIu64 ").", XrEnumToString( xrAppReferenceSpaceType ), (uint64_t) m_xrAppSpace );
+
+		return XR_SUCCESS;
+	}
+
+	XrResult CSession::CreateHmdSpace( XrPosef referencePose, void *pNext ) 
+	{ 
+		// Create reference space
+		XrReferenceSpaceCreateInfo xrReferenceSpaceCreateInfo { XR_TYPE_REFERENCE_SPACE_CREATE_INFO };
+		xrReferenceSpaceCreateInfo.next = pNext;
+		xrReferenceSpaceCreateInfo.poseInReferenceSpace = referencePose;
+		xrReferenceSpaceCreateInfo.referenceSpaceType = XR_REFERENCE_SPACE_TYPE_VIEW;
+		XR_RETURN_ON_ERROR( xrCreateReferenceSpace( m_xrSession, &xrReferenceSpaceCreateInfo, &m_xrHmdSpace ) )
+
+		if ( CheckLogLevelDebug( m_pInstance->GetMinLogLevel() ) )
+			LogDebug( "", "Reference space for HMD of type (%s) created with handle (%" PRIu64 ").", XrEnumToString( XR_REFERENCE_SPACE_TYPE_VIEW ), (uint64_t) m_xrHmdSpace );
 
 		return XR_SUCCESS;
 	}
@@ -385,6 +404,16 @@ namespace xrlib
 		return xrEndFrame( m_xrSession, &xrEndFrameInfo ); 
 	}
 
+	XrResult CSession::LocateSpace( XrSpace baseSpace, XrSpace targetSpace, XrTime predictedDisplayTime, XrSpaceLocation *outSpaceLocation ) 
+	{ 
+		return xrLocateSpace( targetSpace, baseSpace, predictedDisplayTime, outSpaceLocation );
+	}
+
+	XrResult CSession::UpdateHmdPose( XrTime predictedDisplayTime ) 
+	{
+		return LocateSpace( m_xrAppSpace, m_xrHmdSpace, predictedDisplayTime, &m_xrHmdLocation );
+	}
+
 	std::vector< XrReferenceSpaceType > CSession::GetSupportedReferenceSpaceTypes() 
 	{ 
 		assert( m_xrSession != XR_NULL_HANDLE );
@@ -520,6 +549,15 @@ namespace xrlib
 		}
 
 		return 0;
+	}
+
+	const void CSession::GetHmdPose( XrPosef &outPose ) 
+	{ 
+		if ( m_xrHmdLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT )
+			outPose.position = m_xrHmdLocation.pose.position;
+
+		if ( m_xrHmdLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT )
+			outPose.orientation = m_xrHmdLocation.pose.orientation;
 	}
 }
 

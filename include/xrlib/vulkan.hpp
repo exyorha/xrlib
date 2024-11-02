@@ -29,9 +29,9 @@ namespace xrlib
 			const std::vector< const char * > m_vecValidationLayers;
 			const std::vector< const char * > m_vecValidationExtensions;
 		#endif
-
+			          
 		XrResult Init( 
-			VkSurfaceKHR *pSurface = nullptr, 
+			VkSurfaceKHR *pSurface = nullptr,                                                   
 			void *pVkInstanceNext = nullptr, 
 			void *pXrVkInstanceNext = nullptr, 
 			void *pVkLogicalDeviceNext = nullptr, 
@@ -44,6 +44,7 @@ namespace xrlib
 			void *pUserData );
 
 		const bool IsDepthFormat( VkFormat vkFormat );
+		const bool IsStencilFormat( VkFormat vkFormat );
 
 		CSession *GetAppSession() { return m_pSession;  }
 		CInstance *GetAppInstance() { return m_pSession->m_pInstance;  }

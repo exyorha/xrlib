@@ -50,6 +50,7 @@ namespace xrlib
 		XrResult InitVulkan( VkSurfaceKHR *pSurface = nullptr, void *pVkInstanceNext = nullptr, void *pXrVkInstanceNext = nullptr, void *pVkLogicalDeviceNext = nullptr, void *pXrLogicalDeviceNext = nullptr );
 		XrResult CreateXrSession( XrSessionCreateFlags flgAdditionalCreateInfo = 0, void *pNext = nullptr );
 		XrResult CreateAppSpace( XrPosef referencePose, XrReferenceSpaceType referenceSpaceType, void *pNext = nullptr );
+		XrResult CreateHmdSpace( XrPosef referencePose, void *pNext = nullptr );
 		
 		XrResult Start( void *pOtherBeginInfo = nullptr);
 		XrResult Poll( XrEventDataBaseHeader *outEventData );
@@ -101,6 +102,9 @@ namespace xrlib
 			XrEnvironmentBlendMode blendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE, 
 			void *pNext = nullptr );
 
+		XrResult LocateSpace( XrSpace baseSpace, XrSpace targetSpace, XrTime predictedDisplayTime, XrSpaceLocation *outSpaceLocation );
+		XrResult UpdateHmdPose( XrTime predictedDisplayTime );
+
 		std::vector< XrReferenceSpaceType > GetSupportedReferenceSpaceTypes();
 		XrResult GetSupportedTextureFormats( std::vector< int64_t > &outSupportedFormats );
 		int64_t SelectColorTextureFormat( const std::vector< int64_t > &vecRequestedFormats );
@@ -111,6 +115,8 @@ namespace xrlib
 		const XrSession GetXrSession() { return m_xrSession; }
 		const XrSessionState GetState() { return m_xrSessionState; }
 		const XrSpace GetAppSpace() { return m_xrAppSpace; }
+		const XrSpace GetHmdSpace() { return m_xrHmdSpace; }
+		const void GetHmdPose( XrPosef &outPose );
 		const bool IsSessionRunning() { return m_xrSessionState < XR_SESSION_STATE_VISIBLE; }
 
 		const ELogLevel GetMinLogLevel() { return m_pInstance->GetMinLogLevel(); }
@@ -122,6 +128,9 @@ namespace xrlib
 		XrSession m_xrSession = XR_NULL_HANDLE;
 		XrSessionState m_xrSessionState = XR_SESSION_STATE_UNKNOWN;
 		XrSpace m_xrAppSpace = XR_NULL_HANDLE;
+		
+		XrSpace m_xrHmdSpace = XR_NULL_HANDLE;
+		XrSpaceLocation m_xrHmdLocation { XR_TYPE_SPACE_LOCATION };
 
 	};
 }

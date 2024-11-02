@@ -22,13 +22,23 @@ set(XRLIB_INCLUDE "${XRLIB_ROOT}/include")
 set(XRLIB_BIN_OUT "${XRLIB_ROOT}/bin")
 set(XRLIB_LIB_OUT "${XRLIB_ROOT}/lib")
 set(THIRD_PARTY "${XRLIB_ROOT}/third_party")
+set(XRLIB_EXT_INCLUDE "${XRLIB_INCLUDE}/${XRLIB}/ext")
+set(XRLIB_EXT_SRC "${XRLIB_SRC}/${XRLIB}/ext")
 
 set(XRVK_INCLUDE "${XRLIB_INCLUDE}/xrvk")
 set(XRVK_SRC "${XRLIB_SRC}/xrvk")
+set(XRVK_SHADERS_SRC "${XRLIB_ROOT}/res/shaders/src")
+set(XRVK_SHADERS_BIN "${XRLIB_ROOT}/res/shaders/bin")
 
 # Set project configuration files
 set(XRLIB_CONFIG_IN "${XRLIB_ROOT}/project_config.h.in")
 set(XRLIB_CONFIG_OUT "${XRLIB_INCLUDE}/project_config.h")
+
+# Set project wide options
+option(BUILD_AS_STATIC "Build as static library" OFF)
+option(ENABLE_XRVK "Compile xrvk - pbr render module" ON)
+option(ENABLE_RENDERDOC "Enable renderdoc for render debugs" OFF) 
+option(ENABLE_VULKAN_DEBUG "Enable vulkan debugging" OFF) 
 
 # For windows, we need to override openxr's resource script, so define the rc files here which will be used during binary pre-build
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
@@ -74,20 +84,85 @@ file(GLOB_RECURSE XRVK_SOURCE
         "${XRVK_SRC}/*.c*"
 	)
 
+# Exclude extensions (option)
+option(EXCLUDE_KHR_VISIBILITY_MASK "EXCLUDE_KHR_VISIBILITY_MASK" OFF) 
+set(FILES_KHR_VISIBILITY_MASK "KHR/visibility_mask")
+
+option(EXCLUDE_EXT_HAND_TRACKING "EXCLUDE_EXT_HAND_TRACKING" OFF) 
+set (FILES_EXT_HAND_TRACKING  "EXT/hand_tracking" )
+
+option(EXCLUDE_FB_DISPLAY_REFRESH "EXCLUDE_FB_DISPLAY_REFRESH" OFF) 
+set (FILES_FB_DISPLAY_REFRESH "FB/display_refresh_rate" )
+
+option(EXCLUDE_FB_PASSTHROUGH "EXCLUDE_FB_PASSTHROUGH" OFF) 
+set (FILES_FB_PASSTHROUGH "FB/passthrough" "FB/triangle_mesh")
+
+if (${EXCLUDE_KHR_VISIBILITY_MASK} STREQUAL "ON")
+    foreach( f IN ITEMS ${FILES_KHR_VISIBILITY_MASK} )
+        list(REMOVE_ITEM XRLIB_HEADERS "${XRLIB_EXT_INCLUDE}/${f}.hpp" )
+        list(REMOVE_ITEM XRLIB_SOURCE "${XRLIB_EXT_SRC}/${f}.cpp" )
+    endforeach()
+endif()
+
+if (${EXCLUDE_EXT_HAND_TRACKING})
+    foreach(f IN ITEMS ${FILE_EXT_HAND_TRACKING})
+        list(REMOVE_ITEM XRLIB_HEADERS "${XRLIB_EXT_INCLUDE}/${f}.hpp")
+        list(REMOVE_ITEM XRLIB_SOURCE "${XRLIB_EXT_SRC}/${f}.cpp")
+    endforeach()
+endif()
+
+if (${EXCLUDE_FB_DISPLAY_REFRESH})
+    foreach(f IN ITEMS ${FILES_FB_DISPLAY_REFRESH} )
+        list(REMOVE_ITEM XRLIB_HEADERS "${XRLIB_EXT_INCLUDE}/${f}.hpp")
+        list(REMOVE_ITEM XRLIB_SOURCE "${XRLIB_EXT_SRC}/${f}.cpp")
+    endforeach()
+endif()
+
+if (${EXCLUDE_FB_PASSTHROUGH})
+    foreach(f IN ITEMS ${FILES_FB_PASSTHROUGH} )
+        list(REMOVE_ITEM XRLIB_HEADERS "${XRLIB_EXT_INCLUDE}/${f}.hpp")
+        list(REMOVE_ITEM XRLIB_SOURCE "${XRLIB_EXT_SRC}/${f}.cpp")
+    endforeach()
+endif()
+
+# Set shaders
+file(GLOB_RECURSE XRVK_SHADERS
+        "${XRVK_SHADERS_SRC}/*.frag"
+        "${XRVK_SHADERS_SRC}/*.vert"
+        "${XRVK_SHADERS_SRC}/*.tesc"
+        "${XRVK_SHADERS_SRC}/*.tese"
+        "${XRVK_SHADERS_SRC}/*.geom"
+        "${XRVK_SHADERS_SRC}/*.comp"
+	)
+
+# Compile shaders
+set(SHADER_OUTPUT_FILES)
+foreach(SHADER ${XRVK_SHADERS})
+    # Get the filename with extension
+    get_filename_component(SHADER_NAME ${SHADER} NAME)
+
+    # Define the output .spv file path
+    set(OUTPUT_FILE "${XRVK_SHADERS_BIN}/${SHADER_NAME}.spv") 
+
+    # Add custom command to run glslc for each shader file
+    add_custom_command(
+        OUTPUT ${OUTPUT_FILE}
+        COMMAND glslc ${SHADER} -o ${OUTPUT_FILE}
+        COMMENT "Compiling ${SHADER} to ${OUTPUT_FILE}"
+        VERBATIM
+        DEPENDS ${SHADER}  # Check if the shader file has changed
+    )
+
+    # Collect all output files
+    list(APPEND SHADER_OUTPUT_FILES ${OUTPUT_FILE})
+endforeach()
+
+# Create a custom target that depends on all shader output files
+add_custom_target(CompileShaders ALL DEPENDS ${SHADER_OUTPUT_FILES})  
+
 # Set openxr
 set(OPENXR_ROOT "${THIRD_PARTY}/openxr")
 set(OPENXR_INCLUDE "${OPENXR_ROOT}/include")
-
-
-#######################
-# SET COMPILE OPTIONS #
-#######################
-
-# static build
-option(BUILD_AS_STATIC "Build as static library" OFF)
-
-# xrvk - pbr render module
-option(ENABLE_XRVK "Compile xrvk - pbr render module" ON)
 
 
 ######################################
@@ -118,20 +193,25 @@ endif()
 
 # Debug settings
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-
     # Assertions enabled
     message(STATUS "[${XRLIB}] Debug build: Assertions enabled.")
-
-    if(NOT ANDROID)
-        # Enable vulkan validation and debugging
-        add_definitions(-DXRVK_VULKAN_VALIDATION_ENABLE -DXRVK_VULKAN_DEBUG_ENABLE )
-        message(STATUS "[${XRLIB}] Debug build: Vulkan validation and debugging enabled.")
-    endif()
-
 else()
     # Disable assertions by defining NDEBUG
     add_definitions(-DNDEBUG)
     message(STATUS "[${XRLIB}] Release build: Assertions disabled.")
+endif()
+
+# Advanced debug options (desktop only)
+if(NOT ANDROID)
+    if(ENABLE_RENDERDOC)
+        add_definitions(-DRENDERDOC_ENABLE)
+        message(STATUS "[${XRLIB}] DEBUG: Renderdoc frame capture enabled.")
+    endif()
+
+    if(ENABLE_VULKAN_DEBUG)
+        add_definitions(-DXRVK_VULKAN_VALIDATION_ENABLE -DXRVK_VULKAN_DEBUG_ENABLE )
+        message(STATUS "[${XRLIB}] DEBUG: Vulkan validation and debugging enabled.")
+    endif()
 endif()
 
 
@@ -164,6 +244,7 @@ source_group(TREE ${XRLIB_SRC} PREFIX src FILES ${XRLIB_SOURCE})
 
 source_group(TREE ${XRVK_INCLUDE} PREFIX xrvk_include FILES ${XRVK_HEADERS})
 source_group(TREE ${XRVK_SRC} PREFIX xrvk_src FILES ${XRVK_SOURCE})
+source_group(TREE ${XRVK_SHADERS_SRC} PREFIX xrvk_shaders FILES ${XRVK_SHADERS})
 
 # Set project config header which contains this project's current version number
 configure_file(${XRLIB_CONFIG_IN} ${XRLIB_CONFIG_OUT})
@@ -184,6 +265,7 @@ if(ENABLE_XRVK)
     list(APPEND ALLSOURCE 
             ${XRVK_HEADERS} 
             ${XRVK_SOURCE} 
+            ${XRVK_SHADERS}
     )
 
     add_compile_definitions(XRVK_ENABLED)
@@ -291,3 +373,11 @@ add_custom_command(TARGET ${XRLIB} POST_BUILD
                     COMMAND ${CMAKE_COMMAND} -E make_directory "${XRLIB_LIB_OUT}"
                     COMMAND ${CMAKE_COMMAND} -E make_directory "${XRLIB_BIN_OUT}"
                   )
+
+                  
+# Compile shaders only if we're not in an android build
+if(NOT ANDROID)
+    add_custom_command(TARGET ${XRLIB} POST_BUILD
+                            COMMAND ${CMAKE_COMMAND} --build . --target CompileShaders
+                      )
+endif()

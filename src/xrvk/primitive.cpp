@@ -8,8 +8,83 @@
 
 namespace xrlib
 {
-	CPrimitive::CPrimitive( CSession *pSession, uint32_t drawPriority, XrVector3f scale, EAssetMotionType motionType, VkPipeline graphicsPipeline, XrSpace space )
-		: 
+
+	CPlane2D::CPlane2D( CSession *pSession )
+		: m_pSession( pSession )
+	{
+		assert( pSession );
+		
+		// Create device memory buffers
+		m_pIndexBuffer = new CDeviceBuffer( pSession );
+		m_pVertexBuffer = new CDeviceBuffer( pSession );
+	}
+
+	CPlane2D::~CPlane2D() 
+	{ 
+		Reset();
+		DeleteBuffers();
+	}
+
+	VkResult CPlane2D::InitBuffers()
+	{
+		if ( m_pIndexBuffer )
+			delete m_pIndexBuffer;
+
+		m_pIndexBuffer = new CDeviceBuffer( m_pSession );
+		VkResult result = InitBuffer( m_pIndexBuffer, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, sizeof( unsigned short ) * m_vecIndices.size(), m_vecIndices.data() );
+		if ( result != VK_SUCCESS )
+			return result;
+
+		if ( m_pVertexBuffer )
+			delete m_pVertexBuffer;
+
+		m_pVertexBuffer = new CDeviceBuffer( m_pSession );
+		result = InitBuffer( m_pVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof( XrVector2f ) * m_vecVertices.size(), m_vecVertices.data() );
+		if ( result != VK_SUCCESS )
+			return result;
+
+		return VK_SUCCESS;
+	}
+
+	VkResult CPlane2D::InitBuffer( CDeviceBuffer *pBuffer, VkBufferUsageFlags usageFlags, VkDeviceSize unSize, void *pData, VkMemoryPropertyFlags memPropFlags, VkAllocationCallbacks *pCallbacks )
+	{
+		// @todo debug assert.
+		// assert( pBuffer );
+
+		return pBuffer->Init( usageFlags, memPropFlags, unSize, pData, pCallbacks );
+	}
+
+	void CPlane2D::AddTri( XrVector2f v1, XrVector2f v2, XrVector2f v3 )
+	{
+		AddVertex( v1 );
+		AddVertex( v2 );
+		AddVertex( v3 );
+	}
+
+	void CPlane2D::AddIndex( unsigned short index ) { m_vecIndices.push_back( index ); }
+
+	void CPlane2D::AddVertex( XrVector2f vertex ) { m_vecVertices.push_back( vertex ); }
+
+	void CPlane2D::Reset()
+	{
+		ResetIndices();
+		ResetVertices();
+	}
+
+	void CPlane2D::ResetIndices() { m_vecIndices.clear(); }
+
+	void CPlane2D::ResetVertices() { m_vecVertices.clear(); }
+
+	void CPlane2D::DeleteBuffers()
+	{
+		if ( m_pIndexBuffer )
+			delete m_pIndexBuffer;
+
+		if ( m_pVertexBuffer )
+			delete m_pVertexBuffer;
+	}
+
+	CPrimitive::CPrimitive( CSession *pSession, uint32_t drawPriority, XrVector3f scale, EAssetMotionType motionType, VkPipeline graphicsPipeline, XrSpace space ) :
 		m_pSession( pSession ),
 		unDrawPriority( drawPriority ), 
 		pipeline( graphicsPipeline )
@@ -140,7 +215,8 @@ namespace xrlib
 
 	void CPrimitive::ResetVertices() 
 	{ 
-		m_vecVertices.clear(); }
+		m_vecVertices.clear(); 
+	}
 
 	CDeviceBuffer *CPrimitive::UpdateBuffer( VkCommandBuffer transferCmdBuffer ) 
 	{
@@ -175,8 +251,7 @@ namespace xrlib
 			delete m_pInstanceBuffer;
 
 		m_pInstanceBuffer = new CDeviceBuffer( m_pSession );
-		VkResult result = InitBuffer( m_pInstanceBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof( XrMatrix4x4f ) * instanceMatrices.size(), nullptr );
-		assert( result == VK_SUCCESS );
+		assert( InitBuffer( m_pInstanceBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof( XrMatrix4x4f ) * instanceMatrices.size(), nullptr ) == VK_SUCCESS);
 
 		return GetInstanceCount();
 	}
