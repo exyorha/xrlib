@@ -30,7 +30,7 @@
 namespace xrlib
 {
 	struct Instance;
-	class ExtBase_Passthrough : public xrlib::ExtBase
+	class ExtBase_Passthrough : public xrlib::CExtBase
 	{
 	  public:
 		enum class ELayerType
@@ -47,22 +47,22 @@ namespace xrlib
 
 		Flag8 flagSupportedLayerTypes { 0 };
 
-		ExtBase_Passthrough( XrInstance xrInstance, std::string sName ) : ExtBase ( xrInstance, sName ) {};
+		ExtBase_Passthrough( XrInstance xrInstance, std::string sName ) : CExtBase ( xrInstance, sName ) {};
 		~ExtBase_Passthrough() {};
 		bool IsActive() { return m_bIsActive; }
 
-		virtual XrResult Init( XrSession xrSession, CInstance *pInstance, void *pOtherInfo ) = 0;
+		virtual XrResult Init( XrSession xrSession, CInstance *pInstance, void *pOtherInfo = nullptr ) = 0;
 		virtual XrResult Start() = 0;
 		virtual XrResult Stop() = 0;
 		virtual XrResult PauseLayer( int index = -1 ) = 0;
 		virtual XrResult ResumeLayer( int index = -1 ) = 0;
 
-		virtual XrResult AddLayer( XrSession xrSession, ELayerType eLayerType, XrCompositionLayerFlags flags, 
+		virtual XrResult AddLayer( XrSession xrSession, ELayerType eLayerType, XrCompositionLayerFlags flags, XrFlags64 layerFlags = 0,
 			float fOpacity = 1.0f, XrSpace xrSpace = XR_NULL_HANDLE, void* pOtherInfo = nullptr ) = 0;
 
 		virtual XrResult RemoveLayer( uint32_t unIndex ) = 0;
 		
-		virtual void GetCompositionLayers( std::vector< XrCompositionLayerBaseHeader * > &outCompositionLayers ) = 0;
+		virtual void GetCompositionLayers( std::vector< XrCompositionLayerBaseHeader * > &outCompositionLayers, bool bReset = true ) = 0;
 
 	protected:
 		bool m_bIsActive = false;

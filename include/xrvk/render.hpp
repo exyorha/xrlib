@@ -165,6 +165,8 @@ namespace xrlib
 		XrFrameState frameState { XR_TYPE_FRAME_STATE };
 		XrViewState sharedEyeState { XR_TYPE_VIEW_STATE };
 		XrCompositionLayerProjection projectionLayer { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
+		XrCompositionLayerFlags compositionLayerFlags = 0;
+		XrEnvironmentBlendMode environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
 		
 		XrVector3f eyeScale = { 1.0f, 1.0f, 1.0f };
 		XrPosef hmdPose;
@@ -189,6 +191,8 @@ namespace xrlib
 			XrCompositionLayerProjectionView { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW } };
 
 		std::vector< XrCompositionLayerBaseHeader * > frameLayers;
+		std::vector< XrCompositionLayerBaseHeader * > preAppFrameLayers;
+		std::vector< XrCompositionLayerBaseHeader * > postAppFrameLayers;
 
 		std::vector< CDeviceBuffer * > vecStagingBuffers;
 

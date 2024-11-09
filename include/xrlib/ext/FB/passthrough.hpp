@@ -28,23 +28,30 @@
 
 namespace xrlib::FB
 {
-	class Passthrough : public xrlib::ExtBase_Passthrough
+	class CPassthrough : public xrlib::ExtBase_Passthrough
 	{
 	  public:
-		struct PassthroughLayer
+		struct SPassthroughLayer
 		{
 			XrPassthroughLayerFB layer = XR_NULL_HANDLE;
 			XrCompositionLayerPassthroughFB composition { XR_TYPE_COMPOSITION_LAYER_PASSTHROUGH_FB };
 			XrPassthroughStyleFB style { XR_TYPE_PASSTHROUGH_STYLE_FB };
 		};
 
-		Passthrough( XrInstance xrInstance );
-		~Passthrough();
+		CPassthrough( XrInstance xrInstance );
+		~CPassthrough();
 
-		// Passthrough base functions
-		XrResult Init( XrSession session, CInstance *pInstance, void *pOtherInfo ) override;
+		// CPassthrough base functions
+		XrResult Init( XrSession session, CInstance *pInstance, void *pOtherInfo = nullptr ) override;
+
+		bool BSystemSupportsPassthrough();
+		bool BSystemSupportsColorPassthrough();
 		
-		XrResult AddLayer( XrSession session, ELayerType eLayerType, XrCompositionLayerFlags flags, 
+		XrResult AddLayer(
+			XrSession session,
+			ELayerType eLayerType,
+			XrCompositionLayerFlags flags, 
+			XrFlags64 layerFlags = 0,
 			float fOpacity = 1.0f, XrSpace xrSpace = XR_NULL_HANDLE, void *pOtherInfo = nullptr ) override;
 		XrResult RemoveLayer( uint32_t unIndex ) override;
 		
@@ -54,22 +61,22 @@ namespace xrlib::FB
 		XrResult PauseLayer( int index = -1 ) override;
 		XrResult ResumeLayer( int index = -1 ) override;
 
-		void GetCompositionLayers( std::vector< XrCompositionLayerBaseHeader * > &outCompositionLayers ) override;
+		void GetCompositionLayers( std::vector< XrCompositionLayerBaseHeader * > &outCompositionLayers, bool bReset = true ) override;
 
-		// FB Passthrough additional capabilities
-		std::vector< PassthroughLayer > *GetPassthroughLayers() { return &m_vecPassthroughLayers; }
+		// FB CPassthrough additional capabilities
+		std::vector< SPassthroughLayer > *GetPassthroughLayers() { return &m_vecPassthroughLayers; }
 		
-		XrResult SetPassThroughOpacity( PassthroughLayer &refLayer, float fOpacity );
-		XrResult SetPassThroughEdgeColor( PassthroughLayer &refLayer, XrColor4f xrEdgeColor );
-		XrResult SetPassThroughParams( PassthroughLayer &refLayer, float fOpacity, XrColor4f xrEdgeColor );
+		XrResult SetPassThroughOpacity( SPassthroughLayer &refLayer, float fOpacity );
+		XrResult SetPassThroughEdgeColor( SPassthroughLayer &refLayer, XrColor4f xrEdgeColor );
+		XrResult SetPassThroughParams( SPassthroughLayer &refLayer, float fOpacity, XrColor4f xrEdgeColor );
 
 		XrResult SetStyleToMono( int index, float fOpacity = 1.0f );
 		XrResult SetStyleToColorMap( int index, bool bRed, bool bGreen, bool bBlue, float fAlpha = 1.0f, float fOpacity = 1.0f );
 		XrResult SetBCS( int index, float fOpacity = 1.0f, float fBrightness = 0.0f, float fContrast = 1.0f, float fSaturation = 1.0f );
 
 		// FB Triangle mesh
-		void SetTriangleMesh( TriangleMesh *pTriangleMesh );
-		TriangleMesh *GetTriangleMesh() { return m_pTriangleMesh;  }
+		void SetTriangleMesh( CTriangleMesh *pTriangleMesh );
+		CTriangleMesh *GetTriangleMesh() { return m_pTriangleMesh;  }
 		bool IsTriangleMeshSupported() { return m_pTriangleMesh && flagSupportedLayerTypes.IsSet( (int) ELayerType::MESH_PROJECTION ); }
 		bool CreateTriangleMesh( CInstance *pInstance );
 
@@ -110,14 +117,16 @@ namespace xrlib::FB
 
 
 	  private:
-		// Passthrough layers	
-		std::vector< PassthroughLayer > m_vecPassthroughLayers;
+		CInstance *m_pInstance = nullptr;
+
+		// CPassthrough layers	
+		std::vector< SPassthroughLayer > m_vecPassthroughLayers;
 
 		// The main passthrough object which represents the passthrough feature
 		XrPassthroughFB m_fbPassthrough = XR_NULL_HANDLE;
 
 		// Triangle mesh extension for mesh projections of the passthrough layer
-		TriangleMesh *m_pTriangleMesh = nullptr;
+		CTriangleMesh *m_pTriangleMesh = nullptr;
 
 		// Geometry instances for mesh projections
 		std::vector< XrGeometryInstanceFB > m_vecGeometryInstances;

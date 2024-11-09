@@ -1524,18 +1524,34 @@ namespace xrlib
 			}
 
 			// (2.14) Assemble frame layers
+
+			// (2.14.1) Pre application layers
+			if ( !renderInfo.preAppFrameLayers.empty() )
+			{
+				for ( XrCompositionLayerBaseHeader* layer : renderInfo.preAppFrameLayers )
+					renderInfo.frameLayers.push_back( layer );
+			}
+
+			// (2.14.2) Application layers
 			renderInfo.projectionLayer.next = nullptr;
-			renderInfo.projectionLayer.layerFlags = 0;
+			renderInfo.projectionLayer.layerFlags = renderInfo.compositionLayerFlags;
 
 			renderInfo.projectionLayer.space = m_pSession->GetAppSpace();
 			renderInfo.projectionLayer.viewCount = (uint32_t) renderInfo.projectionLayerViews.size();
 			renderInfo.projectionLayer.views = renderInfo.projectionLayerViews.data();
 
 			renderInfo.frameLayers.push_back( reinterpret_cast< XrCompositionLayerBaseHeader * >( &renderInfo.projectionLayer ) );
+
+			// (2.14.3) Post application layers
+			if ( !renderInfo.postAppFrameLayers.empty() )
+			{
+				for ( XrCompositionLayerBaseHeader *layer : renderInfo.postAppFrameLayers )
+					renderInfo.frameLayers.push_back( layer );
+			}
 		}
 
 		// (3) End frame
-		m_pSession->EndFrame( &renderInfo.frameState, renderInfo.frameLayers );
+		m_pSession->EndFrame( &renderInfo.frameState, renderInfo.frameLayers, renderInfo.environmentBlendMode );
 		renderInfo.frameLayers.clear();
 
 		#if defined( _WIN32 ) && defined( RENDERDOC_ENABLE )

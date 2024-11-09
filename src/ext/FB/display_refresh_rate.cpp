@@ -22,8 +22,8 @@
 
 namespace xrlib::FB
 {
-	DisplayRefreshRate::DisplayRefreshRate( XrInstance xrInstance ) :  
-		ExtBase( xrInstance, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME )
+	CDisplayRefreshRate::CDisplayRefreshRate( XrInstance xrInstance ) :  
+		CExtBase( xrInstance, XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME )
 	{
 		// Initialize all function pointers available for this extension
 		INIT_PFN( xrInstance, xrEnumerateDisplayRefreshRatesFB );
@@ -31,7 +31,7 @@ namespace xrlib::FB
 		INIT_PFN( xrInstance, xrRequestDisplayRefreshRateFB );
 	}
 
-	XrResult DisplayRefreshRate::GetSupportedRefreshRates( XrSession xrSession, std::vector< float > &outSupportedRefreshRates )
+	XrResult CDisplayRefreshRate::GetSupportedRefreshRates( XrSession xrSession, std::vector< float > &outSupportedRefreshRates )
 	{
 		// Get the refresh rate count capacity
 		uint32_t unRefreshRateCount = 0;
@@ -54,7 +54,7 @@ namespace xrlib::FB
 		return xrResult;
 	}
 
-	float DisplayRefreshRate::GetCurrentRefreshRate( XrSession xrSession )
+	float CDisplayRefreshRate::GetCurrentRefreshRate( XrSession xrSession )
 	{
 		float outRefreshRate = 0.0f;
 		XrResult xrResult = xrGetDisplayRefreshRateFB( xrSession, &outRefreshRate );
@@ -68,7 +68,7 @@ namespace xrlib::FB
 		return outRefreshRate;
 	}
 
-	XrResult DisplayRefreshRate::RequestRefreshRate( XrSession xrSession, float fRequestedRefreshRate )
+	XrResult CDisplayRefreshRate::RequestRefreshRate( XrSession xrSession, float fRequestedRefreshRate )
 	{
 
 		XrResult xrResult = xrRequestDisplayRefreshRateFB( xrSession, fRequestedRefreshRate );

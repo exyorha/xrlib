@@ -137,7 +137,7 @@ file(GLOB_RECURSE XRVK_SHADERS
 	)
 
 # Compile shaders
-if(BUILD_SHADERS)
+if(NOT ANDROID AND BUILD_SHADERS)
     set(SHADER_OUTPUT_FILES)
     foreach(SHADER ${XRVK_SHADERS})
         # Get the filename with extension
@@ -160,7 +160,7 @@ if(BUILD_SHADERS)
     endforeach()
 
     # Create a custom target that depends on all shader output files
-    add_custom_target(CompileShaders ALL DEPENDS ${SHADER_OUTPUT_FILES})  
+    add_custom_target(_compile_shaders ALL DEPENDS ${SHADER_OUTPUT_FILES})  
 endif()
 
 # Set openxr
@@ -381,6 +381,6 @@ add_custom_command(TARGET ${XRLIB} POST_BUILD
 # Compile shaders only if we're not in an android build
 if(NOT ANDROID AND BUILD_SHADERS)
     add_custom_command(TARGET ${XRLIB} POST_BUILD
-                            COMMAND ${CMAKE_COMMAND} --build . --target CompileShaders
+                            COMMAND ${CMAKE_COMMAND} --build . --target _compile_shaders
                       )
 endif()

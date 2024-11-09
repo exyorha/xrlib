@@ -24,7 +24,7 @@
 namespace xrlib::KHR
 {
 	CVisibilityMask::CVisibilityMask( XrInstance xrInstance ): 
-		ExtBase( xrInstance, XR_KHR_VISIBILITY_MASK_EXTENSION_NAME )
+		CExtBase( xrInstance, XR_KHR_VISIBILITY_MASK_EXTENSION_NAME )
 	{
 		XrResult result = INIT_PFN( xrInstance, xrGetVisibilityMaskKHR );
 		assert( XR_UNQUALIFIED_SUCCESS( result ) );	

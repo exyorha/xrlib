@@ -23,11 +23,11 @@
 
 namespace xrlib::FB
 {
-	class TriangleMesh : public ExtBase
+	class CTriangleMesh : public CExtBase
 	{
 	  public:
-		TriangleMesh( XrInstance xrInstance );
-		~TriangleMesh();
+		CTriangleMesh( XrInstance xrInstance );
+		~CTriangleMesh();
 
 		std::vector< XrTriangleMeshFB > *GetMeshes() { return &m_vecMeshes; }
 

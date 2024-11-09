@@ -21,7 +21,7 @@
 namespace xrlib::FB
 {
 
-	Passthrough::Passthrough( XrInstance xrInstance )
+	CPassthrough::CPassthrough( XrInstance xrInstance )
 		: ExtBase_Passthrough( xrInstance, XR_FB_PASSTHROUGH_EXTENSION_NAME )
 	{
 		assert( xrInstance != XR_NULL_HANDLE );
@@ -41,7 +41,7 @@ namespace xrlib::FB
 		INIT_PFN( xrInstance, xrGeometryInstanceSetTransformFB );
 	}
 
-	Passthrough::~Passthrough()
+	CPassthrough::~CPassthrough()
 	{
 		// Delete all layers
 		for ( auto& layer : m_vecPassthroughLayers )
@@ -68,8 +68,10 @@ namespace xrlib::FB
 			xrDestroyPassthroughFB( m_fbPassthrough );
 	}
 
-	XrResult Passthrough::Init( XrSession session, CInstance *pInstance, void *pOtherInfo )
+	XrResult CPassthrough::Init( XrSession session, CInstance *pInstance, void *pOtherInfo )
 	{
+		m_pInstance = pInstance;
+
 		// Get flags if any
 		XrPassthroughFlagsFB flags = 0;
 		if ( pOtherInfo )
@@ -89,8 +91,32 @@ namespace xrlib::FB
 		return xrResult;
 	}
 
-	XrResult Passthrough::AddLayer( XrSession session, ELayerType eLayerType, XrCompositionLayerFlags flags, 
-		float fOpacity, XrSpace xrSpace, void *pOtherInfo ) 
+	bool CPassthrough::BSystemSupportsPassthrough() 
+	{ 
+		XrSystemPassthroughProperties2FB passthroughSystemProperties { XR_TYPE_SYSTEM_PASSTHROUGH_PROPERTIES2_FB };
+		XrSystemProperties systemProperties { XR_TYPE_SYSTEM_PROPERTIES, &passthroughSystemProperties };
+
+		m_pInstance->GetXrSystemProperties( true, &systemProperties );
+		return ( passthroughSystemProperties.capabilities & XR_PASSTHROUGH_CAPABILITY_BIT_FB ) == XR_PASSTHROUGH_CAPABILITY_BIT_FB;	
+	}
+
+	bool CPassthrough::BSystemSupportsColorPassthrough() 
+	{ 
+		XrSystemPassthroughProperties2FB passthroughSystemProperties { XR_TYPE_SYSTEM_PASSTHROUGH_PROPERTIES2_FB };
+		XrSystemProperties systemProperties { XR_TYPE_SYSTEM_PROPERTIES, &passthroughSystemProperties };
+
+		m_pInstance->GetXrSystemProperties( true, &systemProperties );
+		return ( passthroughSystemProperties.capabilities & XR_PASSTHROUGH_CAPABILITY_COLOR_BIT_FB ) == XR_PASSTHROUGH_CAPABILITY_COLOR_BIT_FB;			
+	}
+
+	XrResult CPassthrough::AddLayer( 
+		XrSession session, 
+		ELayerType eLayerType, 
+		XrCompositionLayerFlags flags,
+		XrFlags64 layerFlags,
+		float fOpacity, 
+		XrSpace xrSpace, 
+		void *pOtherInfo ) 
 	{ 
 		assert( session != XR_NULL_HANDLE );
 		assert( m_fbPassthrough );
@@ -98,6 +124,7 @@ namespace xrlib::FB
 		// Define layer
 		XrPassthroughLayerCreateInfoFB xrPassthroughLayerCI = { XR_TYPE_PASSTHROUGH_LAYER_CREATE_INFO_FB };
 		xrPassthroughLayerCI.passthrough = m_fbPassthrough;
+        xrPassthroughLayerCI.flags = layerFlags;
 
 		switch ( eLayerType )
 		{
@@ -138,7 +165,7 @@ namespace xrlib::FB
 		return xrResult; 
 	}
 
-	XrResult Passthrough::RemoveLayer( uint32_t unIndex ) 
+	XrResult CPassthrough::RemoveLayer( uint32_t unIndex ) 
 	{ 
 		assert( m_fbPassthrough );
 		assert( unIndex < m_vecPassthroughLayers.size() );
@@ -154,7 +181,7 @@ namespace xrlib::FB
 		return XR_SUCCESS; 
 	}
 
-	XrResult Passthrough::Start()
+	XrResult CPassthrough::Start()
 	{
 		assert( m_fbPassthrough );
 
@@ -173,7 +200,7 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	XrResult Passthrough::Stop()
+	XrResult CPassthrough::Stop()
 	{
 		if ( !IsActive() || m_vecPassthroughLayers.empty() )
 			return XR_SUCCESS;
@@ -190,7 +217,7 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	XrResult Passthrough::PauseLayer( int index ) 
+	XrResult CPassthrough::PauseLayer( int index ) 
 	{ 
 		assert( m_fbPassthrough );
         assert( index < (int) m_vecPassthroughLayers.size() );
@@ -211,7 +238,7 @@ namespace xrlib::FB
 		return XR_SUCCESS; 
 	}
 
-	XrResult Passthrough::ResumeLayer( int index ) 
+	XrResult CPassthrough::ResumeLayer( int index ) 
 	{ 
 		assert( m_fbPassthrough );
 		assert( index < (int) m_vecPassthroughLayers.size() );
@@ -232,15 +259,18 @@ namespace xrlib::FB
 		return XR_SUCCESS; 
 	}
 
-	void Passthrough::GetCompositionLayers( std::vector< XrCompositionLayerBaseHeader * > &outCompositionLayers ) 
+	void CPassthrough::GetCompositionLayers( std::vector< XrCompositionLayerBaseHeader * > &outCompositionLayers, bool bReset ) 
 	{
+		if ( bReset )
+			outCompositionLayers.clear();
+
 		for ( auto& layer : m_vecPassthroughLayers )
 		{
 			outCompositionLayers.push_back( reinterpret_cast< XrCompositionLayerBaseHeader * >( &layer.composition ) );
 		}
 	}
 
-	XrResult Passthrough::SetPassThroughOpacity( PassthroughLayer &refLayer, float fOpacity )
+	XrResult CPassthrough::SetPassThroughOpacity( SPassthroughLayer &refLayer, float fOpacity )
 	{
 		refLayer.style.textureOpacityFactor = fOpacity;
 
@@ -252,7 +282,7 @@ namespace xrlib::FB
 		return xrResult;
 	}
 
-	XrResult Passthrough::SetPassThroughEdgeColor( PassthroughLayer &refLayer, XrColor4f xrEdgeColor )
+	XrResult CPassthrough::SetPassThroughEdgeColor( SPassthroughLayer &refLayer, XrColor4f xrEdgeColor )
 	{
 		refLayer.style.edgeColor = xrEdgeColor;
 
@@ -264,7 +294,7 @@ namespace xrlib::FB
 		return xrResult;
 	}
 
-	XrResult Passthrough::SetPassThroughParams( PassthroughLayer &refLayer, float fOpacity, XrColor4f xrEdgeColor )
+	XrResult CPassthrough::SetPassThroughParams( SPassthroughLayer &refLayer, float fOpacity, XrColor4f xrEdgeColor )
 	{
 		refLayer.style.textureOpacityFactor = fOpacity;
 		refLayer.style.edgeColor = xrEdgeColor;
@@ -277,7 +307,7 @@ namespace xrlib::FB
 		return xrResult;
 	}
 
-	XrResult Passthrough::SetStyleToMono( int index, float fOpacity )
+	XrResult CPassthrough::SetStyleToMono( int index, float fOpacity )
 	{
 		assert( m_fbPassthrough );
 		assert( m_vecPassthroughLayers.size() > index );
@@ -316,7 +346,7 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	XrResult Passthrough::SetStyleToColorMap( int index, bool bRed, bool bGreen, bool bBlue, float fAlpha, float fOpacity )
+	XrResult CPassthrough::SetStyleToColorMap( int index, bool bRed, bool bGreen, bool bBlue, float fAlpha, float fOpacity )
 	{
 		assert( m_fbPassthrough );
 		assert( m_vecPassthroughLayers.size() > index );
@@ -355,7 +385,7 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	XrResult Passthrough::SetBCS( int index, float fOpacity, float fBrightness, float fContrast, float fSaturation )
+	XrResult CPassthrough::SetBCS( int index, float fOpacity, float fBrightness, float fContrast, float fSaturation )
 	{
 		assert( m_fbPassthrough );
 		assert( m_vecPassthroughLayers.size() > index );
@@ -393,7 +423,7 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	void Passthrough::SetTriangleMesh( TriangleMesh *pTriangleMesh ) 
+	void CPassthrough::SetTriangleMesh( CTriangleMesh *pTriangleMesh ) 
 	{ 
 		if ( pTriangleMesh )
 		{
@@ -405,13 +435,13 @@ namespace xrlib::FB
 		flagSupportedLayerTypes.Reset( (int) ELayerType::MESH_PROJECTION );
 	}
 
-	bool Passthrough::CreateTriangleMesh( CInstance *pInstance ) 
+	bool CPassthrough::CreateTriangleMesh( CInstance *pInstance ) 
 	{ 
 		for ( auto &ext : pInstance->GetEnabledExtensions() )
 		{
 			if ( ext == XR_FB_TRIANGLE_MESH_EXTENSION_NAME )
 			{
-				SetTriangleMesh( new TriangleMesh( pInstance->GetXrInstance() ) );
+				SetTriangleMesh( new CTriangleMesh( pInstance->GetXrInstance() ) );
 				flagSupportedLayerTypes.Set( (int) ELayerType::MESH_PROJECTION );
 				return true;
 			}
@@ -420,7 +450,7 @@ namespace xrlib::FB
 		return false;
 	}
 
-	XrResult Passthrough::AddGeometry( 
+	XrResult CPassthrough::AddGeometry( 
 		XrSession session,
 		XrPassthroughLayerFB &layer, 
 		std::vector< XrVector3f > &vecVertices, 
@@ -453,7 +483,7 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	XrResult Passthrough::UpdateGeometry( XrGeometryInstanceFB xrGeomInstance, XrSpace xrSpace, XrTime xrTime, XrPosef xrPose, XrVector3f xrScale ) 
+	XrResult CPassthrough::UpdateGeometry( XrGeometryInstanceFB xrGeomInstance, XrSpace xrSpace, XrTime xrTime, XrPosef xrPose, XrVector3f xrScale ) 
 	{ 
 		XrGeometryInstanceTransformFB xrGeomInstTransform = { XR_TYPE_GEOMETRY_INSTANCE_TRANSFORM_FB };
 		xrGeomInstTransform.baseSpace = xrSpace;

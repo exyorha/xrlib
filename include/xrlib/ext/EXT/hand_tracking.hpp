@@ -12,7 +12,7 @@
 
 namespace xrlib::EXT
 {
-	class CHandTracking : public ExtBase
+	class CHandTracking : public CExtBase
 	{
 	  public:
 		CHandTracking( XrInstance xrInstance );

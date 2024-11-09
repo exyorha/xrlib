@@ -24,7 +24,7 @@
 
 namespace xrlib::KHR
 {
-	class CVisibilityMask : public ExtBase
+	class CVisibilityMask : public CExtBase
 	{
 	  public:
 

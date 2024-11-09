@@ -13,10 +13,10 @@
 
 namespace xrlib
 {
-	class ExtBase
+	class CExtBase
 	{
 	  public:
-		ExtBase( XrInstance xrInstance, std::string sName ) : 
+		CExtBase( XrInstance xrInstance, std::string sName ) : 
 			m_xrInstance( xrInstance ),
 			m_sName( sName )
 		{
@@ -24,7 +24,7 @@ namespace xrlib
 			assert( !sName.empty() );
 		}
 
-		~ExtBase() {};
+		~CExtBase() {};
 
 		std::string GetName() { return m_sName; }
 

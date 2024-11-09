@@ -21,8 +21,8 @@
 
 namespace xrlib::FB
 {
-	TriangleMesh::TriangleMesh( XrInstance xrInstance ): 
-		ExtBase( xrInstance, XR_FB_TRIANGLE_MESH_EXTENSION_NAME )
+	CTriangleMesh::CTriangleMesh( XrInstance xrInstance ): 
+		CExtBase( xrInstance, XR_FB_TRIANGLE_MESH_EXTENSION_NAME )
 	{
 		INIT_PFN( xrInstance, xrCreateTriangleMeshFB );
 		INIT_PFN( xrInstance, xrDestroyTriangleMeshFB );
@@ -34,12 +34,12 @@ namespace xrlib::FB
 		INIT_PFN( xrInstance, xrTriangleMeshEndVertexBufferUpdateFB );
 	}
 
-	TriangleMesh::~TriangleMesh() 
+	CTriangleMesh::~CTriangleMesh() 
 	{ 
 		ClearGeometryCache();
 	}
 
-	XrResult TriangleMesh::AddGeometry(
+	XrResult CTriangleMesh::AddGeometry(
 		XrSession xrSession,
 		XrPassthroughLayerFB &layer,
 		std::vector< XrVector3f > &vecVertices,
@@ -61,7 +61,7 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	XrResult TriangleMesh::RemoveGeometry( uint32_t unIndex ) 
+	XrResult CTriangleMesh::RemoveGeometry( uint32_t unIndex ) 
 	{ 
 		assert( unIndex < GetMeshes()->size() );
 
@@ -76,7 +76,7 @@ namespace xrlib::FB
 		return XR_SUCCESS; 
 	}
 
-	void TriangleMesh::ClearGeometryCache() 
+	void CTriangleMesh::ClearGeometryCache() 
 	{
 		for ( auto &mesh : m_vecMeshes )
 			if ( mesh != XR_NULL_HANDLE )

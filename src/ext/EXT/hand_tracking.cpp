@@ -47,7 +47,7 @@ namespace xrlib::EXT
 	}
 
 	CHandTracking::CHandTracking( XrInstance xrInstance ) : 
-		ExtBase( xrInstance, XR_EXT_HAND_TRACKING_EXTENSION_NAME) 
+		CExtBase( xrInstance, XR_EXT_HAND_TRACKING_EXTENSION_NAME) 
 	{
 		// Initialize function pointers
         XrResult result = INIT_PFN( xrInstance, xrLocateHandJointsEXT );
