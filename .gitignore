@@ -377,5 +377,7 @@ MigrationBackup/
 .ionide/
 
 # Exceptions
+!*.gltf
+!*.glb
 !*.spv
 !LICENSE
