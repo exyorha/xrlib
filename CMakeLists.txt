@@ -1,7 +1,13 @@
 # xrlib
-# Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
-# Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+# Copyright 2024,2025 Copyright Rune Berg 
+# https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+# Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
 # SPDX-License-Identifier: Apache-2.0
+# 
+# This work is the next iteration of OpenXRProvider (v1, v2)
+# OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+# OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+# v1 & v2 licensed under MIT: https://opensource.org/license/mit
 
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 set(CMAKE_SUPPRESS_REGENERATION true)
@@ -13,7 +19,7 @@ set(CMAKE_SUPPRESS_REGENERATION true)
 
 # Set project variables
 set(XRLIB "xrlib")
-project("${XRLIB}" VERSION 1.0.0.0)
+project("${XRLIB}" VERSION 0.1.0.0)
 
 # Set project directories
 set(XRLIB_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -29,6 +35,8 @@ set(XRVK_INCLUDE "${XRLIB_INCLUDE}/xrvk")
 set(XRVK_SRC "${XRLIB_SRC}/xrvk")
 set(XRVK_SHADERS_SRC "${XRLIB_ROOT}/res/shaders/src")
 set(XRVK_SHADERS_BIN "${XRLIB_ROOT}/res/shaders/bin")
+set(XRVK_MODELS_SRC "${XRLIB_ROOT}/res/models/src")
+set(XRVK_MODELS_BIN "${XRLIB_ROOT}/res/models/bin")
 
 # Set project configuration files
 set(XRLIB_CONFIG_IN "${XRLIB_ROOT}/project_config.h.in")
@@ -38,7 +46,7 @@ set(XRLIB_CONFIG_OUT "${XRLIB_INCLUDE}/project_config.h")
 option(BUILD_AS_STATIC "Build as static library" OFF)
 option(BUILD_SHADERS "Build shaders in resource directory" ON)
 option(ENABLE_XRVK "Compile xrvk - pbr render module" ON)
-option(ENABLE_RENDERDOC "Enable renderdoc for render debugs" OFF) 
+option(ENABLE_RENDERDOC "Enable renderdoc for render debugs" ON) 
 option(ENABLE_VULKAN_DEBUG "Enable vulkan debugging" OFF) 
 
 # For windows, we need to override openxr's resource script, so define the rc files here which will be used during binary pre-build
@@ -136,6 +144,10 @@ file(GLOB_RECURSE XRVK_SHADERS
         "${XRVK_SHADERS_SRC}/*.comp"
 	)
 
+file(GLOB_RECURSE XRVK_SHADERS_INCLUDE
+        "${XRVK_SHADERS_SRC}/*.glsl"
+	)
+
 # Compile shaders
 if(NOT ANDROID AND BUILD_SHADERS)
     set(SHADER_OUTPUT_FILES)
@@ -230,7 +242,19 @@ else()
 	message(STATUS "[${XRLIB}] Vulkan library loaded: ${Vulkan_LIBRARY}")
 endif()
 
+# Add openxr
 add_subdirectory(${OPENXR_ROOT})
+
+# Add TinyGLTF
+set(TINYGLTF_USE_CPP14 ON CACHE INTERNAL "" FORCE)
+set(TINYGLTF_HEADER_ONLY ON CACHE INTERNAL "" FORCE)
+set(TINYGLTF_INSTALL OFF CACHE INTERNAL "" FORCE)
+
+if(ANDROID)
+    set(TINYGLTF_ANDROID_LOAD_FROM_ASSETS ON CACHE INTERNAL "" FORCE)
+endif()
+
+add_subdirectory(${THIRD_PARTY}/tinygltf)
 
 
 #####################
@@ -247,12 +271,11 @@ source_group(TREE ${XRLIB_SRC} PREFIX src FILES ${XRLIB_SOURCE})
 
 source_group(TREE ${XRVK_INCLUDE} PREFIX xrvk_include FILES ${XRVK_HEADERS})
 source_group(TREE ${XRVK_SRC} PREFIX xrvk_src FILES ${XRVK_SOURCE})
-source_group(TREE ${XRVK_SHADERS_SRC} PREFIX xrvk_shaders FILES ${XRVK_SHADERS})
+source_group(TREE ${XRVK_SHADERS_SRC} PREFIX xrvk_shaders FILES ${XRVK_SHADERS} ${XRVK_SHADERS_INCLUDE})
 
 # Set project config header which contains this project's current version number
 configure_file(${XRLIB_CONFIG_IN} ${XRLIB_CONFIG_OUT})
 message(STATUS "[${XRLIB}] Project version is ${CMAKE_PROJECT_VERSION}")
-
 
 # Assemble all source code (and optional modules/code) that will be compiled for the library
 # See "Set Compile Options" section
@@ -269,6 +292,7 @@ if(ENABLE_XRVK)
             ${XRVK_HEADERS} 
             ${XRVK_SOURCE} 
             ${XRVK_SHADERS}
+            ${XRVK_SHADERS_INCLUDE}
     )
 
     add_compile_definitions(XRVK_ENABLED)
@@ -346,6 +370,10 @@ else()
                           ${Vulkan_LIBRARY}
                          )
 endif()
+
+    target_link_libraries(${XRLIB} PUBLIC 
+                          tinygltf
+                         )
 
 message(STATUS "[${XRLIB}] Third party libraries linked.")
 

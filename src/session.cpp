@@ -1,11 +1,19 @@
-/*
- * Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
- * Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+/* 
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
  * SPDX-License-Identifier: Apache-2.0
- */
+ * 
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
+*/
+
 
 #include <xrlib/session.hpp>
 #include <xrlib/vulkan.hpp>
+#include <array>
 
 namespace xrlib
 {
@@ -22,7 +30,7 @@ namespace xrlib
 		if ( m_xrAppSpace != XR_NULL_HANDLE )
 			xrDestroySpace( m_xrAppSpace );
 
-		if ( m_xrAppSpace != XR_NULL_HANDLE )
+		if ( m_xrHmdSpace != XR_NULL_HANDLE )
 			xrDestroySpace( m_xrHmdSpace );
 
 		if ( m_xrSession != XR_NULL_HANDLE )
@@ -89,7 +97,7 @@ namespace xrlib
 		XrResult xrResult = m_pVulkan->Init( pSurface, pVkInstanceNext, pXrVkInstanceNext, pVkLogicalDeviceNext, pXrLogicalDeviceNext );
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "", "Unable to initialize Vulkan resources: %s", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Unable to initialize Vulkan resources: %s", XrEnumToString( xrResult ) );
 			return xrResult;
 		}
 
@@ -112,7 +120,7 @@ namespace xrlib
 		XrResult xrResult = xrCreateSession( m_pInstance->GetXrInstance(), &xrSessionCreateInfo, &m_xrSession );
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "", "Unable to create openxr session: %s", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Unable to create openxr session: %s", XrEnumToString( xrResult ) );
 			return xrResult;
 		}
 
@@ -126,10 +134,10 @@ namespace xrlib
 		{
 			auto vecSupportedReferenceSpaceTypes = GetSupportedReferenceSpaceTypes();
 
-			LogDebug( "", "This session supports %i reference space type(s):", vecSupportedReferenceSpaceTypes.size() );
+			LogDebug( XRLIB_NAME, "This session supports %i reference space type(s):", vecSupportedReferenceSpaceTypes.size() );
 			for ( auto &xrReferenceSpaceType : vecSupportedReferenceSpaceTypes )
 			{
-				LogDebug( "", "\t%s", XrEnumToString( xrReferenceSpaceType ) );
+				LogDebug( XRLIB_NAME, "\t%s", XrEnumToString( xrReferenceSpaceType ) );
 			}
 		}
 
@@ -141,7 +149,7 @@ namespace xrlib
 		XR_RETURN_ON_ERROR( xrCreateReferenceSpace( m_xrSession, &xrReferenceSpaceCreateInfo, &m_xrAppSpace ) )
 
 		if ( CheckLogLevelDebug( m_pInstance->GetMinLogLevel() ) )
-			LogDebug( "", "Reference space for APP of type (%s) created with handle (%" PRIu64 ").", XrEnumToString( xrAppReferenceSpaceType ), (uint64_t) m_xrAppSpace );
+			LogDebug( XRLIB_NAME, "Reference space for APP of type (%s) created with handle (%" PRIu64 ").", XrEnumToString( xrAppReferenceSpaceType ), (uint64_t) m_xrAppSpace );
 
 		return XR_SUCCESS;
 	}
@@ -156,7 +164,7 @@ namespace xrlib
 		XR_RETURN_ON_ERROR( xrCreateReferenceSpace( m_xrSession, &xrReferenceSpaceCreateInfo, &m_xrHmdSpace ) )
 
 		if ( CheckLogLevelDebug( m_pInstance->GetMinLogLevel() ) )
-			LogDebug( "", "Reference space for HMD of type (%s) created with handle (%" PRIu64 ").", XrEnumToString( XR_REFERENCE_SPACE_TYPE_VIEW ), (uint64_t) m_xrHmdSpace );
+			LogDebug( XRLIB_NAME, "Reference space for HMD of type (%s) created with handle (%" PRIu64 ").", XrEnumToString( XR_REFERENCE_SPACE_TYPE_VIEW ), (uint64_t) m_xrHmdSpace );
 
 		return XR_SUCCESS;
 	}
@@ -176,11 +184,11 @@ namespace xrlib
 
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "", "Unable to start session: %s", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Unable to start session: %s", XrEnumToString( xrResult ) );
 			return xrResult;
 		}
 
-		LogInfo( "", "OpenXR session started (%" PRIu64 ") with view configuration type: %s", (uint64_t) m_xrSession, XrEnumToString( xrViewConfigurationType ) );
+		LogInfo( XRLIB_NAME, "OpenXR session started (%" PRIu64 ") with view configuration type: %s", (uint64_t) m_xrSession, XrEnumToString( xrViewConfigurationType ) );
 		return XR_SUCCESS;
 	}
 
@@ -223,13 +231,13 @@ namespace xrlib
 		{
 			// Report any lost events
 			const XrEventDataEventsLost *const eventsLost = reinterpret_cast< const XrEventDataEventsLost * >( outEventData );
-			LogWarning( "", "Poll events warning - there are %i events lost", eventsLost->lostEventCount );
+				LogWarning( XRLIB_NAME, "Poll events warning - there are %i events lost", eventsLost->lostEventCount );
 		}
 		else if ( outEventData->type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED )
 		{
 			// Update session state
 			const XrEventDataSessionStateChanged xrSessionStateChangedEvent = *reinterpret_cast< const XrEventDataSessionStateChanged * >( outEventData );
-			LogInfo( "", "OpenXR session state changed from %s to %s", XrEnumToString( m_xrSessionState ), XrEnumToString( xrSessionStateChangedEvent.state ) );
+				LogInfo( XRLIB_NAME, "OpenXR session state changed from %s to %s", XrEnumToString( m_xrSessionState ), XrEnumToString( xrSessionStateChangedEvent.state ) );
 			m_xrSessionState = xrSessionStateChangedEvent.state;
 		}
 
@@ -248,7 +256,7 @@ namespace xrlib
 			xrResult = xrRequestExitSession( m_xrSession );
 			if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 			{
-				LogError( "", "Error requesting runtime to end session: %s", XrEnumToString( xrResult ) );
+				LogError( XRLIB_NAME, "Error requesting runtime to end session: %s", XrEnumToString( xrResult ) );
 				return xrResult;
 			}
 		}
@@ -256,11 +264,11 @@ namespace xrlib
 		xrResult = xrEndSession( m_xrSession );
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "", "Unable to end session: %s", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Unable to end session: %s", XrEnumToString( xrResult ) );
 			return xrResult;
 		}
 
-		LogInfo( "", "OpenXR session ended." );
+		LogInfo( XRLIB_NAME, "OpenXR session ended." );
 		return XR_SUCCESS; 
 	}
 
@@ -280,7 +288,7 @@ namespace xrlib
 
 	XrResult CSession::UpdateEyeStates( 
 		std::vector< XrView > &outEyeViews,
-		std::vector< XrMatrix4x4f > &outEyeProjections,
+		std::array< XrMatrix4x4f, 2 > &outEyeProjections,
 		XrViewState *outEyeViewsState,
 		XrFrameState *pFrameState,
 		XrSpace space,
@@ -424,7 +432,7 @@ namespace xrlib
 		XrResult xrResult = xrEnumerateReferenceSpaces( m_xrSession, unReferenceSpaceTypesNum, &unReferenceSpaceTypesNum, nullptr );
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "", "Error getting supported reference space types from the runtime: %s", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Error getting supported reference space types from the runtime: %s", XrEnumToString( xrResult ) );
 			return std::vector< XrReferenceSpaceType >();
 		}
 
@@ -433,7 +441,7 @@ namespace xrlib
 
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "", "Error getting supported reference space types from the runtime: %s", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Error getting supported reference space types from the runtime: %s", XrEnumToString( xrResult ) );
 			return std::vector< XrReferenceSpaceType >();
 		}
 

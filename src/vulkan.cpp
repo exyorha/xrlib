@@ -1,8 +1,15 @@
-/*
- * Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
- * Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+/* 
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
  * SPDX-License-Identifier: Apache-2.0
- */
+ * 
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
+*/
+
 
 #include <xrlib/vulkan.hpp>
 #include <xrlib/common.hpp>
@@ -35,11 +42,11 @@ namespace xrlib
 		if ( GetAppInstance()->GetXrInstance() == XR_NULL_HANDLE )
 			return XR_ERROR_CALL_ORDER_INVALID;
 
-		// (1) Call *required* function GetVulkanGraphicsRequirements
+		// Call *required* function GetVulkanGraphicsRequirements
 		//     This returns the min-and-max vulkan api level required by the active runtime
 		XR_RETURN_ON_ERROR( GetVulkanGraphicsRequirements() );
 
-		// (2) Define app info for vulkan
+		// Define app info for vulkan
 		VkApplicationInfo vkApplicationInfo { VK_STRUCTURE_TYPE_APPLICATION_INFO };
 		vkApplicationInfo.pApplicationName = GetAppInstance()->GetAppName();
 		vkApplicationInfo.applicationVersion = static_cast< uint32_t >( GetAppInstance()->GetAppVersion() );
@@ -47,7 +54,7 @@ namespace xrlib
 		vkApplicationInfo.engineVersion = XR_MAKE_VERSION32( XRLIB_VERSION_MAJOR, XRLIB_VERSION_MINOR, XRLIB_VERSION_PATCH );
 		vkApplicationInfo.apiVersion = VK_API_VERSION_1_2;
 
-		// (3) Add vulkan layers and extensions the library needs
+		// Add vulkan layers and extensions the library needs
 		for ( auto validationLayer : m_vecValidationLayers )
 			vecLayers.push_back( validationLayer );
 
@@ -67,7 +74,7 @@ namespace xrlib
 				vecExtensions.push_back( VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME );
 		#endif
 
-		// (4) Create vulkan instance
+		// Create vulkan instance
 		VkInstanceCreateInfo vkInstanceCreateInfo { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
 		vkInstanceCreateInfo.pApplicationInfo = &vkApplicationInfo;
 		vkInstanceCreateInfo.enabledLayerCount = (uint32_t) vecLayers.size();
@@ -101,21 +108,21 @@ namespace xrlib
 			return xrResult == XR_SUCCESS ? XR_ERROR_VALIDATION_FAILURE : xrResult;
 		}
 		
-		LogInfo( "", "Vulkan instance successfully created." );
+		LogInfo( XRLIB_NAME, "Vulkan instance successfully created." );
 
-		// (5) Get the vulkan physical device (gpu) used by the runtime
+		// Get the vulkan physical device (gpu) used by the runtime
 		xrResult = GetVulkanGraphicsPhysicalDevice();
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "Error getting the runtime's vulkan physical device (gpu) with result (%s) ", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Error getting the runtime's vulkan physical device (gpu) with result (%s) ", XrEnumToString( xrResult ) );
 			return xrResult;
 		}
 
-		// (6) Create vulkan logical device
+		// Create vulkan logical device
 		xrResult = CreateVulkanLogicalDevice( pSurface, pVkLogicalDeviceNext, pXrLogicalDeviceNext );
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			LogError( "Error getting the runtime's vulkan physical device (gpu) with result (%s) ", XrEnumToString( xrResult ) );
+			LogError( XRLIB_NAME, "Error getting the runtime's vulkan physical device (gpu) with result (%s) ", XrEnumToString( xrResult ) );
 			return xrResult;
 		}
 
@@ -182,7 +189,7 @@ namespace xrlib
 	{ 
 		assert( m_vkPhysicalDevice != VK_NULL_HANDLE );
 
-		// (1) Setup device queues ( one for graphics and one for presentation to a surface/mirror if available)
+		// Setup device queues ( one for graphics and one for presentation to a surface/mirror if available)
 		VkDeviceQueueCreateInfo vkDeviceQueueCI_Graphics { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
 		float fQueuePriority_Graphics = 1.f; // highest priority for rendering to hmd
 		vkDeviceQueueCI_Graphics.queueCount = 1;
@@ -198,7 +205,7 @@ namespace xrlib
 		vkDeviceQueueCI_Present.queueCount = 1;
 		vkDeviceQueueCI_Present.pQueuePriorities = &fQueuePriority_Present;
 
-		// (2) Retrieve all queue families for the physical device
+		// Retrieve all queue families for the physical device
 		uint32_t unQueueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties( m_vkPhysicalDevice, &unQueueFamilyCount, nullptr );
 		std::vector< VkQueueFamilyProperties > vecQueueFamilyProps( unQueueFamilyCount );
@@ -249,17 +256,23 @@ namespace xrlib
 			vecLogicalDeviceExtensions.push_back( VK_KHR_SWAPCHAIN_EXTENSION_NAME );
 		#endif
 
-		// (3) Setup logical device
+		// Setup logical device
 		vkPhysicalDeviceFeatures.samplerAnisotropy = VK_TRUE;
 		// VkPhysicalDeviceFeatures2 physical_features2 = { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
 		// physical_features2.features.samplerAnisotropy = VK_TRUE;
+		// physical_features2.features.multiViewport = VK_TRUE;
 		// vkGetPhysicalDeviceFeatures2( m_SharedState.vkPhysicalDevice, &physical_features2 );
 
 		//// log warning(s) if feature(s) is/are not supported
-		// if ( physical_features2.features.samplerAnisotropy == VK_FALSE || m_SharedState.vkPhysicalDeviceFeatures.samplerAnisotropy == VK_FALSE )
+		//if ( physical_features2.features.samplerAnisotropy == VK_FALSE || m_SharedState.vkPhysicalDeviceFeatures.samplerAnisotropy == VK_FALSE )
 		//{
-		//	LogWarning( "features.samplerAnisotropy is not available in this gpu, application may not run or render as intended." );
+		//	LogWarning( "xrvk", "features.samplerAnisotropy is not available in this gpu, application may not run or render as intended." );
 		// }
+
+		// Add multiview (required)
+		vkPhysicalDeviceFeatures.multiViewport = VK_TRUE;
+		vkPhysicalDeviceFeatures.sampleRateShading = VK_TRUE;
+		vecLogicalDeviceExtensions.push_back( VK_KHR_MULTIVIEW_EXTENSION_NAME );
 
 		std::vector< VkDeviceQueueCreateInfo > vecDeviceQueueCIs;
 		vecDeviceQueueCIs.push_back( vkDeviceQueueCI_Graphics );
@@ -292,18 +305,18 @@ namespace xrlib
 		xrVulkanDeviceCreateInfo.vulkanPhysicalDevice = m_vkPhysicalDevice;
 		xrVulkanDeviceCreateInfo.vulkanAllocator = nullptr;
 
-		// (4) Create logical device
+		// Create logical device
 		VkResult vkResult = VK_SUCCESS;
 		XrResult xrResult = CreateVkDevice( vkResult, &xrVulkanDeviceCreateInfo );
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) || vkResult != VK_SUCCESS )
 		{
-			LogError( "", "Error creating vulkan device with openxr result (%s) and vulkan result (%i)", xrlib::XrEnumToString( xrResult ), (int32_t) vkResult );
+			LogError( XRLIB_NAME, "Error creating vulkan device with openxr result (%s) and vulkan result (%i)", xrlib::XrEnumToString( xrResult ), (int32_t) vkResult );
 			return xrResult == XR_SUCCESS ? XR_ERROR_VALIDATION_FAILURE : xrResult;
 		}
 
-		LogInfo( "", "Vulkan (logical) device successfully created." );
+		LogInfo( XRLIB_NAME, "Vulkan (logical) device successfully created." );
 
-		// (5) Get device queue(s)
+		// Get device queue(s)
 		vkGetDeviceQueue( m_vkDevice, m_vkQueueIndex_GraphicsFamily, 0, &m_vkQueue_Graphics );
 		
 		if ( !bTransferIsSameAsGraphics )
@@ -324,7 +337,7 @@ namespace xrlib
 				vkGetDeviceQueue( m_vkDevice, m_vkQueueIndex_PresentFamily, 0, &m_vkQueue_Present );
 		}
 
-		// (6) Create graphics binding that we will use to create an openxr session
+		// Create graphics binding that we will use to create an openxr session
 		m_xrGraphicsBinding.instance = m_vkInstance;
 		m_xrGraphicsBinding.physicalDevice = m_vkPhysicalDevice;
 		m_xrGraphicsBinding.device = m_vkDevice;

@@ -1,19 +1,15 @@
 /* 
- * Copyright 2023-24 Beyond Reality Labs Ltd (https://beyondreality.io)
- * Copyright 2021-24 Rune Berg (GitHub: https://github.com/1runeberg, YT: https://www.youtube.com/@1RuneBerg, X: https://twitter.com/1runeberg, BSky: https://runeberg.social)
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
+ * SPDX-License-Identifier: Apache-2.0
  * 
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
 */
+
 
 #include <xrlib/ext/FB/triangle_mesh.hpp>
 

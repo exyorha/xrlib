@@ -1,10 +1,24 @@
-/*
- * Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
- * Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+/* 
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
  * SPDX-License-Identifier: Apache-2.0
- */
+ * 
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
+*/
 
-#include <xrvk/render.hpp>
+
+#ifdef XR_USE_PLATFORM_ANDROID
+	#define TINYGLTF_ANDROID_LOAD_FROM_ASSETS
+#endif
+
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <tinygltf/tiny_gltf.h>
 
 #if defined( _WIN32 ) && defined( RENDERDOC_ENABLE )
 	#define RENDERDOC_FRAME_SAMPLES 5
@@ -13,6 +27,8 @@
 
 	RENDERDOC_API_1_1_2 *rdoc_api = NULL;
 #endif
+
+#include <xrvk/render.hpp>
 
 namespace xrlib
 {
@@ -149,6 +165,11 @@ namespace xrlib
 		assert( pSession );
 		assert( pSession->GetXrSession() != XR_NULL_HANDLE );
 
+		// Set asset manager for tinygltf (android only)
+		#ifdef XR_USE_PLATFORM_ANDROID
+				tinygltf::asset_manager = pSession->GetAppInstance()->GetAssetManager();
+		#endif
+
 		// Validate session's current view configuration
 		assert( pSession->xrViewConfigurationType == XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO );
 
@@ -183,6 +204,9 @@ namespace xrlib
 			// Destroy render views
 			for ( auto &renderTarget : m_vecMultiviewRenderTargets )
 			{
+				if ( renderTarget.vkColorImageDescriptor.imageView != VK_NULL_HANDLE )
+					vkDestroyImageView( GetLogicalDevice(), renderTarget.vkColorImageDescriptor.imageView, nullptr );
+
 				if ( renderTarget.vkColorImageDescriptor.imageView != VK_NULL_HANDLE )
 					vkDestroyImageView( GetLogicalDevice(), renderTarget.vkColorImageDescriptor.imageView, nullptr );
 
@@ -254,7 +278,7 @@ namespace xrlib
 	{ 
 		assert( m_pSession->GetVulkan()->GetVkPhysicalDevice() != VK_NULL_HANDLE );
 
-		// (1) Update eye view configurations
+		// Update eye view configurations
 		uint32_t unEyeConfigNum = 0;
 		m_vecEyeConfigs.clear();
 
@@ -281,10 +305,10 @@ namespace xrlib
 			m_vecEyeConfigs.data() ) );
 
 
-		// (2) Create eye views that will contain up to date fov, pose, etc
+		// Create eye views that will contain up to date fov, pose, etc
 		m_vecEyeViews.resize( unEyeConfigNum, { XR_TYPE_VIEW } );
 
-		// (3) Validate image array support
+		// Validate image array support
 		VkPhysicalDeviceProperties vkPhysicalDeviceProps;
 		vkGetPhysicalDeviceProperties( m_pSession->GetVulkan()->GetVkPhysicalDevice(), &vkPhysicalDeviceProps );
 			
@@ -294,7 +318,7 @@ namespace xrlib
 			return XR_ERROR_VALIDATION_FAILURE;
 		}
 
-		// (4) Create color swapchain
+		// Create color swapchain
 		XrSwapchainCreateInfo xrSwapchainCreateInfo { XR_TYPE_SWAPCHAIN_CREATE_INFO };
 		xrSwapchainCreateInfo.format = m_vkColorFormat;
 		xrSwapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
@@ -307,7 +331,7 @@ namespace xrlib
 
 		XR_RETURN_ON_ERROR( xrCreateSwapchain( m_pSession->GetXrSession(), &xrSwapchainCreateInfo, &m_xrColorSwapchain ) );
 
-		// (5) Create depth swapchain
+		// Create depth swapchain
 		xrSwapchainCreateInfo.format = m_vkDepthFormat;
 		xrSwapchainCreateInfo.usageFlags = XR_SWAPCHAIN_USAGE_SAMPLED_BIT | XR_SWAPCHAIN_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
@@ -345,14 +369,14 @@ namespace xrlib
 
 	XrResult CStereoRender::CreateRenderPass( VkRenderPass &outRenderPass, bool bUseVisMask ) 
 	{ 
-		// (1) Setup render pass artifacts - render targets
+		// Setup render pass artifacts - render targets
 		XR_RETURN_ON_ERROR( InitRendering_Multiview() );
 
-		// (2) Create render pass
+		// Create render pass
 		XR_RETURN_ON_ERROR( CreateRenderPass_Multiview( bUseVisMask ) );
 		outRenderPass = vecRenderPasses.back();
 
-		// (3) Create frame buffers for this render pass
+		// Create frame buffers for this render pass
 		XR_RETURN_ON_ERROR( CreateFramebuffers_Multiview( outRenderPass ) );
 
 		return XR_SUCCESS;
@@ -397,9 +421,59 @@ namespace xrlib
 		for ( uint32_t i = 0; i < unSwapchainImageCount; i++ )
 		{
 			m_vecMultiviewRenderTargets.push_back( {} );
+
+			// Create msaa color image, custom settings for multiview/MSAA
+			VkImageCreateInfo msaaImageCI { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+			msaaImageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			msaaImageCI.imageType = VK_IMAGE_TYPE_2D;
+			msaaImageCI.format = m_vkColorFormat;
+			msaaImageCI.extent.width = m_unTextureWidth;
+			msaaImageCI.extent.height = m_unTextureHeight;
+			msaaImageCI.extent.depth = 1;
+			msaaImageCI.mipLevels = 1;
+			msaaImageCI.arrayLayers = k_EyeCount;		 
+			msaaImageCI.samples = VK_SAMPLE_COUNT_2_BIT; 
+			msaaImageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+			msaaImageCI.usage = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			msaaImageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			msaaImageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+			VkImage msaaImage;
+			VkDeviceMemory msaaMemory;
+			VK_CHECK_RESULT( vkCreateImage( GetLogicalDevice(), &msaaImageCI, nullptr, &msaaImage ) );
+
+			// Get memory requirements and allocate
+			VkMemoryRequirements memRequirements;
+			vkGetImageMemoryRequirements( GetLogicalDevice(), msaaImage, &memRequirements );
+
+			VkMemoryAllocateInfo allocInfo {};
+			allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			allocInfo.allocationSize = memRequirements.size;
+			allocInfo.memoryTypeIndex = vkutils::FindMemoryTypeWithFallback( GetPhysicalDevice(), memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT );
+
+			VK_CHECK_RESULT( vkAllocateMemory( GetLogicalDevice(), &allocInfo, nullptr, &msaaMemory ) );
+			VK_CHECK_RESULT( vkBindImageMemory( GetLogicalDevice(), msaaImage, msaaMemory, 0 ) );
+
+			m_vecMultiviewRenderTargets.back().vkMSAAColorTexture = msaaImage;
+
+			// Runtime provided image becomes msaa resolve target
 			m_vecMultiviewRenderTargets.back().vkColorTexture = m_vecSwapchainColorImages[ i ].image;
 
-			// Color image view
+			// Create MSAA image view
+			VkImageViewCreateInfo msaaViewCI { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+			msaaViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			msaaViewCI.image = msaaImage;
+			msaaViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY; 
+			msaaViewCI.format = m_vkColorFormat;
+			msaaViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			msaaViewCI.subresourceRange.baseMipLevel = 0;
+			msaaViewCI.subresourceRange.levelCount = 1;
+			msaaViewCI.subresourceRange.baseArrayLayer = 0;
+			msaaViewCI.subresourceRange.layerCount = k_EyeCount; 
+
+			VK_CHECK_RESULT( vkCreateImageView( GetLogicalDevice(), &msaaViewCI, nullptr, &m_vecMultiviewRenderTargets.back().vkMSAAColorView ) );
+
+			// Color image view (image from openxr runtime, will be used as the msaa resolve image)
 			VkImageViewCreateInfo imageViewCI { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 			imageViewCI.pNext = pColorNext;
 			imageViewCI.flags = colorCreateFlags;
@@ -422,14 +496,61 @@ namespace xrlib
 				&m_vecMultiviewRenderTargets.back().vkColorImageDescriptor.imageView );
 			assert( result == VK_SUCCESS );
 
-			// Depth image view
+			// Create MSAA depth image
+			VkImageCreateInfo msaaDepthCI { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+			msaaDepthCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			msaaDepthCI.imageType = VK_IMAGE_TYPE_2D;
+			msaaDepthCI.format = m_vkDepthFormat;
+			msaaDepthCI.extent.width = m_unTextureWidth;
+			msaaDepthCI.extent.height = m_unTextureHeight;
+			msaaDepthCI.extent.depth = 1;
+			msaaDepthCI.mipLevels = 1;
+			msaaDepthCI.arrayLayers = k_EyeCount;
+			msaaDepthCI.samples = VK_SAMPLE_COUNT_2_BIT;
+			msaaDepthCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+			msaaDepthCI.usage = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			msaaDepthCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			msaaDepthCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+			VkImage msaaDepthImage;
+			VkDeviceMemory msaaDepthMemory;
+			VK_CHECK_RESULT( vkCreateImage( GetLogicalDevice(), &msaaDepthCI, nullptr, &msaaDepthImage ) );
+
+			// Get memory requirements and allocate
+			VkMemoryRequirements depthMemRequirements;
+			vkGetImageMemoryRequirements( GetLogicalDevice(), msaaDepthImage, &depthMemRequirements );
+
+			VkMemoryAllocateInfo depthAllocInfo {};
+			depthAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			depthAllocInfo.allocationSize = depthMemRequirements.size;
+			depthAllocInfo.memoryTypeIndex = vkutils::FindMemoryTypeWithFallback( GetPhysicalDevice(), depthMemRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT );
+
+			VK_CHECK_RESULT( vkAllocateMemory( GetLogicalDevice(), &depthAllocInfo, nullptr, &msaaDepthMemory ) );
+			VK_CHECK_RESULT( vkBindImageMemory( GetLogicalDevice(), msaaDepthImage, msaaDepthMemory, 0 ) );
+
+			m_vecMultiviewRenderTargets.back().vkMSAADepthTexture = msaaDepthImage;
+
+			// Create MSAA depth view
+			VkImageViewCreateInfo msaaDepthViewCI { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
+			msaaDepthViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			msaaDepthViewCI.image = msaaDepthImage;
+			msaaDepthViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+			msaaDepthViewCI.format = m_vkDepthFormat;
+			msaaDepthViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+			msaaDepthViewCI.subresourceRange.baseMipLevel = 0;
+			msaaDepthViewCI.subresourceRange.levelCount = 1;
+			msaaDepthViewCI.subresourceRange.baseArrayLayer = 0;
+			msaaDepthViewCI.subresourceRange.layerCount = k_EyeCount;
+
+			VK_CHECK_RESULT( vkCreateImageView( GetLogicalDevice(), &msaaDepthViewCI, nullptr, &m_vecMultiviewRenderTargets.back().vkMSAADepthView ) );
+
+			// Depth image view (image from openxr runtime, will be used as the msaa resolve image)
 			m_vecMultiviewRenderTargets.back().vkDepthTexture = m_vecSwapchainDepthImages[ i ].image;
 
 			imageViewCI.pNext = NULL;
 			imageViewCI.flags = depthCreateFlags;
 			imageViewCI.format = m_vkDepthFormat;
 			imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-
 			imageViewCI.image = m_vecMultiviewRenderTargets.back().vkDepthTexture;
 
 			result = vkCreateImageView( 
@@ -484,6 +605,24 @@ namespace xrlib
 		return XR_SUCCESS; 
 	}
 
+	VkResult CStereoRender::CreateDescriptorPool( 
+		VkDescriptorPool &outPool, 
+		std::vector< VkDescriptorPoolSize > &poolSizes, 
+		uint32_t maxSets, 
+		VkDescriptorPoolCreateFlags flags,
+		void *pNext ) 
+	{ 
+		VkDescriptorPoolCreateInfo poolInfo = {
+			VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			pNext,
+			flags,
+			maxSets,
+			static_cast<uint32_t>( poolSizes.size() ), 
+			poolSizes.data() };
+
+		return vkCreateDescriptorPool( GetLogicalDevice(), &poolInfo, nullptr, &outPool );
+	}
+
 	XrResult CStereoRender::CreateRenderPass_Multiview( bool bUseVisMask )
 	{
 		if ( m_vecMultiviewRenderTargets.size() != m_vecSwapchainColorImages.size() )
@@ -494,31 +633,46 @@ namespace xrlib
 
 		m_bUseVisMask = bUseVisMask && m_pSession->GetVulkan()->IsStencilFormat( m_vkDepthFormat );
 
-		// (1) Define Attachment Descriptions (Color, Depth-Stencil)
-		std::vector< VkAttachmentDescription > vecAttachmentDescriptions;
+		// Define Attachment Descriptions (Color, Depth-Stencil)
+		std::vector< VkAttachmentDescription2 > vecAttachmentDescriptions;
 
-		// Color attachment (for final output)
-		VkAttachmentDescription colorAttachment = GenerateColorAttachmentDescription();
+		// Color attachment (MSAA - shader output)
+		VkAttachmentDescription2 colorAttachment = GenerateColorAttachmentDescription();
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachment.samples = VK_SAMPLE_COUNT_2_BIT;
 		vecAttachmentDescriptions.push_back( colorAttachment );
 
-		// Depth (+stencil) attachment
-		VkAttachmentDescription depthStencilAttachment = GenerateDepthAttachmentDescription();
+		// Resolve color attachment (runtime image - resolve target)
+		VkAttachmentDescription2 resolveColorAttachment = GenerateColorAttachmentDescription();
+		resolveColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		vecAttachmentDescriptions.push_back( resolveColorAttachment );
+
+		// Depth/stencil attachment (MSAA - shader output)
+		VkAttachmentDescription2 depthStencilAttachment = GenerateDepthAttachmentDescription();
+		depthStencilAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthStencilAttachment.samples = VK_SAMPLE_COUNT_2_BIT;
 		vecAttachmentDescriptions.push_back( depthStencilAttachment );
 
-		// (2) Define Subpass Descriptions
-		std::vector< VkSubpassDescription > vecSubpassDescriptions;
+		// Resolve depth attachment (runtime image - resolve target)
+		VkAttachmentDescription2 resolveDepthStencilAttachment = GenerateDepthAttachmentDescription();
+		resolveDepthStencilAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		vecAttachmentDescriptions.push_back( resolveDepthStencilAttachment );
+
+		// Define Subpass Descriptions
+		std::vector< VkSubpassDescription2 > vecSubpassDescriptions;
 
 		if ( m_bUseVisMask ) // If visibility mask is enabled, create a stencil subpass
 		{
 			// Left eye stencil setup (no color output, writes to stencil buffer)
-			VkAttachmentReference stencilReference = {};
-			stencilReference.attachment = 1; // Index of depth-stencil attachment
+			VkAttachmentReference2 stencilReference = { VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2 };
+			stencilReference.attachment = 2; // Index of depth-stencil attachment
 			stencilReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-			VkSubpassDescription stencilSubpass = {};
+			VkSubpassDescription2 stencilSubpass = { VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2 };
 			stencilSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 			stencilSubpass.colorAttachmentCount = 0;					// No color output
 			stencilSubpass.pDepthStencilAttachment = &stencilReference; // Use depth-stencil attachment for stencil
+			stencilSubpass.viewMask = k_unStereoViewMask;
 			vecSubpassDescriptions.push_back( stencilSubpass );
 
 			// Right eye stencil setup
@@ -526,28 +680,46 @@ namespace xrlib
 		}
 
 		// Main subpass (depth & color render)
-		VkAttachmentReference colorReference = {};
-		colorReference.attachment = 0; // Index of color attachment
+		VkAttachmentReference2 colorReference = { VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2 };
+		colorReference.attachment = 0; // Index of color attachment (msaa)
 		colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		VkAttachmentReference depthStencilReference = {};
-		depthStencilReference.attachment = 1; // Index of depth-stencil attachment
+		VkAttachmentReference2 resolveColorReference = { VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2 };
+		resolveColorReference.attachment = 1; // Index of color resolve attachment
+		resolveColorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference2 depthStencilReference = { VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2 };
+		depthStencilReference.attachment = 2; // Index of depth attachment (msaa)
 		depthStencilReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-		VkSubpassDescription mainSubpass = {};
+		VkAttachmentReference2 resolveDepthStencilReference = { VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2 };
+		resolveDepthStencilReference.attachment = 3; // Index of depth resolve attachment
+		resolveDepthStencilReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescriptionDepthStencilResolve depthStencilResolve = { VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE };
+		depthStencilResolve.pNext = nullptr;												
+		depthStencilResolve.depthResolveMode = VK_RESOLVE_MODE_MIN_BIT;				
+		depthStencilResolve.stencilResolveMode = VK_RESOLVE_MODE_NONE;			
+		depthStencilResolve.pDepthStencilResolveAttachment = &resolveDepthStencilReference; // Reference to the resolve attachment
+
+		VkSubpassDescription2 mainSubpass = { VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2 };
+		mainSubpass.pNext = &depthStencilResolve;
 		mainSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		mainSubpass.colorAttachmentCount = 1;
-		mainSubpass.pColorAttachments = &colorReference;
-		mainSubpass.pDepthStencilAttachment = &depthStencilReference; // Use both depth and stencil for testing
+		mainSubpass.pColorAttachments = &colorReference;			  // Reference to color attachment
+		mainSubpass.pResolveAttachments = &resolveColorReference;	  // Reference to color resolve attachment
+		mainSubpass.pDepthStencilAttachment = &depthStencilReference; // Reference to depth stencil attachment
+		mainSubpass.viewMask = k_unStereoViewMask;
+
 		vecSubpassDescriptions.push_back( mainSubpass );
 
-		// (3) Define Subpass Dependencies
-		std::vector< VkSubpassDependency > vecSubpassDependencies;
+		// Define Subpass Dependencies
+		std::vector< VkSubpassDependency2 > vecSubpassDependencies;
 
 		if ( m_bUseVisMask ) 
 		{
 			// External dependency before the render pass (from VK_SUBPASS_EXTERNAL to subpass 0)
-			vecSubpassDependencies.push_back( {} );
+			vecSubpassDependencies.push_back( { VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2 } );
 			vecSubpassDependencies.back().srcSubpass = VK_SUBPASS_EXTERNAL;
 			vecSubpassDependencies.back().dstSubpass = 0; // First subpass (stencil setup)
 			vecSubpassDependencies.back().srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
@@ -557,7 +729,7 @@ namespace xrlib
 			vecSubpassDependencies.back().dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			// Internal dependency (between left eye stencil subpass and right eye stencil subpass)
-			vecSubpassDependencies.push_back( {} );
+			vecSubpassDependencies.push_back( { VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2 } );
 			vecSubpassDependencies.back().srcSubpass = 0;																			  // First subpass (stencil setup)
 			vecSubpassDependencies.back().dstSubpass = 1;																			  // Second subpass (main rendering)
 			vecSubpassDependencies.back().srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;									  // Write to depth/stencil
@@ -567,7 +739,7 @@ namespace xrlib
 			vecSubpassDependencies.back().dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			// Internal dependency (between right eye stencil subpass and main rendering subpass)
-			vecSubpassDependencies.push_back( {} );
+			vecSubpassDependencies.push_back( { VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2 } );
 			vecSubpassDependencies.back().srcSubpass = 1;																			  // Second stencil subpass (right eye)
 			vecSubpassDependencies.back().dstSubpass = 2;																			  // Main rendering subpass
 			vecSubpassDependencies.back().srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;									  // Write to depth/stencil
@@ -577,7 +749,7 @@ namespace xrlib
 			vecSubpassDependencies.back().dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			// External dependency after the render pass (from main rendering subpass to VK_SUBPASS_EXTERNAL)
-			vecSubpassDependencies.push_back( {} );
+			vecSubpassDependencies.push_back( { VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2 } );
 			vecSubpassDependencies.back().srcSubpass = 2; // Last subpass (main rendering)
 			vecSubpassDependencies.back().dstSubpass = VK_SUBPASS_EXTERNAL;
 			vecSubpassDependencies.back().srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;								  // Final color output stage
@@ -589,7 +761,7 @@ namespace xrlib
 		else // Dependencies for a single subpass
 		{
 			// External dependency before the render pass
-			vecSubpassDependencies.push_back( {} );
+			vecSubpassDependencies.push_back( { VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2 } );
 			vecSubpassDependencies.back().srcSubpass = VK_SUBPASS_EXTERNAL;
 			vecSubpassDependencies.back().dstSubpass = 0;	// Single subpass
 			vecSubpassDependencies.back().srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT; // Wait for memory to be ready
@@ -599,7 +771,7 @@ namespace xrlib
 			vecSubpassDependencies.back().dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
 			// External dependency after the render pass
-			vecSubpassDependencies.push_back( {} );
+			vecSubpassDependencies.push_back( { VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2 } );
 			vecSubpassDependencies.back().srcSubpass = 0; // Single subpass
 			vecSubpassDependencies.back().dstSubpass = VK_SUBPASS_EXTERNAL;
 			vecSubpassDependencies.back().srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;	 // Color output and depth/stencil tests
@@ -609,26 +781,26 @@ namespace xrlib
 			vecSubpassDependencies.back().dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 		}
 
-		// (4) Create the Render Pass
-		VkRenderPassCreateInfo renderPassCI = GenerateRenderPassCI( vecAttachmentDescriptions, vecSubpassDescriptions, vecSubpassDependencies );
+		// Create the Render Pass
+		VkRenderPassCreateInfo2 renderPassCI = GenerateRenderPassCI( vecAttachmentDescriptions, vecSubpassDescriptions, vecSubpassDependencies );
 
-		// (5) Add Multiview to Render Pass
-		VkRenderPassMultiviewCreateInfo multiviewCI = GenerateMultiviewCI();
-		renderPassCI.pNext = &multiviewCI;
+		// (A) Add Multiview to Render Pass (legacy, for vulkan 1.1, values are now in subpassdescription and renderpass ci)
+		//VkRenderPassMultiviewCreateInfo multiviewCI = GenerateMultiviewCI();
+		//renderPassCI.pNext = &multiviewCI;
 
-		// (6) Adjustments to multiview if vismask is enabled
-		if ( m_bUseVisMask )
-		{
-			std::array< uint32_t, 3 > subpassViewMasks = {
-				this->k_unStereoViewMask,
-				this->k_unStereoViewMask,
-				this->k_unStereoViewMask,
-			};
-			multiviewCI.pViewMasks = subpassViewMasks.data();
-			multiviewCI.subpassCount = 3;
-		}
+		// (B) Adjustments to multiview if vismask is enabled (legacy, for vulkan 1.1, values are now in subpassdescription and renderpass ci)
+		//if ( m_bUseVisMask )
+		//{
+		//	std::array< uint32_t, 3 > subpassViewMasks = {
+		//		this->k_unStereoViewMask,
+		//		this->k_unStereoViewMask,
+		//		this->k_unStereoViewMask,
+		//	};
+		//	multiviewCI.pViewMasks = subpassViewMasks.data();
+		//	multiviewCI.subpassCount = 3;
+		//}
 
-		// (7) Create the Render Pass
+		// Create the Render Pass
 		VkResult result = AddRenderPass( &renderPassCI );
 		if ( !VK_CHECK_SUCCESS( result ) )
 		{
@@ -651,7 +823,7 @@ namespace xrlib
 
 		for ( auto &renderTarget : m_vecMultiviewRenderTargets )
 		{
-			std::array< VkImageView, 2 > arrImageViews { VK_NULL_HANDLE, VK_NULL_HANDLE };
+			std::array< VkImageView, 4 > arrImageViews { VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE };
 			renderTarget.SetImageViewArray( arrImageViews );
 
 			VkFramebufferCreateInfo frameBufferCI = GenerateMultiviewFrameBufferCI( arrImageViews, vkRenderPass );
@@ -662,26 +834,26 @@ namespace xrlib
 		return XR_SUCCESS; 
 	}
 
-	VkAttachmentDescription CStereoRender::GenerateColorAttachmentDescription() 
+	VkAttachmentDescription2 CStereoRender::GenerateColorAttachmentDescription() 
 	{ 
-		VkAttachmentDescription outDesc {};
+		VkAttachmentDescription2 outDesc { VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2 };
 		outDesc.format = m_vkColorFormat;
-		outDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+		outDesc.samples = VK_SAMPLE_COUNT_2_BIT;
 		outDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		outDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		outDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		outDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-		outDesc.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		outDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		outDesc.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		return outDesc;
 	}
 
-	VkAttachmentDescription CStereoRender::GenerateDepthAttachmentDescription()
+	VkAttachmentDescription2 CStereoRender::GenerateDepthAttachmentDescription()
 	{
-		VkAttachmentDescription outDesc {};
+		VkAttachmentDescription2 outDesc { VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2 };
 		outDesc.format = m_vkDepthFormat;
-		outDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+		outDesc.samples = VK_SAMPLE_COUNT_2_BIT;
 		outDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 
 		if ( m_bUseVisMask )
@@ -732,15 +904,15 @@ namespace xrlib
 		return multiviewCI;
 	}
 
-	VkRenderPassCreateInfo
+	VkRenderPassCreateInfo2
 		CStereoRender::GenerateRenderPassCI( 
-			std::vector< VkAttachmentDescription > &vecAttachmentDescriptions, 
-			std::vector< VkSubpassDescription > &vecSubpassDescriptions, 
-			std::vector< VkSubpassDependency > &vecSubpassDependencies,
+			std::vector< VkAttachmentDescription2 > &vecAttachmentDescriptions, 
+			std::vector< VkSubpassDescription2 > &vecSubpassDescriptions, 
+			std::vector< VkSubpassDependency2 > &vecSubpassDependencies,
 			const VkRenderPassCreateFlags vkCreateFlags,
 			const void *pNext ) 
 	{ 
-		VkRenderPassCreateInfo renderPassCI { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+		VkRenderPassCreateInfo2 renderPassCI { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2 };
 		renderPassCI.pNext = pNext;
 		renderPassCI.flags = vkCreateFlags;
 		renderPassCI.attachmentCount = vecAttachmentDescriptions.empty() ? 0 : (uint32_t) vecAttachmentDescriptions.size();
@@ -749,12 +921,14 @@ namespace xrlib
 		renderPassCI.pSubpasses = vecSubpassDescriptions.empty() ? nullptr : vecSubpassDescriptions.data();
 		renderPassCI.dependencyCount = vecSubpassDependencies.empty() ? 0 : (uint32_t) vecSubpassDependencies.size();
 		renderPassCI.pDependencies = vecSubpassDependencies.empty() ? nullptr : vecSubpassDependencies.data();
+		renderPassCI.correlatedViewMaskCount = 1;
+		renderPassCI.pCorrelatedViewMasks = &this->k_unStereoConcurrentMask;
 
 		return renderPassCI;
 	}
 
 	VkFramebufferCreateInfo	CStereoRender::GenerateMultiviewFrameBufferCI( 
-			std::array< VkImageView, 2 > &arrImageViews,
+			std::array< VkImageView, 4 > &arrImageViews,
 			VkRenderPass vkRenderPass, 
 			VkFramebufferCreateFlags vkCreateFlags, 	
 			const void *pNext ) 
@@ -795,12 +969,12 @@ namespace xrlib
 		return samplerCI;
 	}
 
-	VkPipelineColorBlendAttachmentState CStereoRender::GenerateColorBlendAttachment() 
+	VkPipelineColorBlendAttachmentState CStereoRender::GenerateColorBlendAttachment( bool bEnableAlphaBlending ) 
 	{ 
 		VkPipelineColorBlendAttachmentState colorBlendAttachment {};
-		colorBlendAttachment.blendEnable = 0;
-		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+		colorBlendAttachment.blendEnable = bEnableAlphaBlending ? VK_TRUE : VK_FALSE;
+		colorBlendAttachment.srcColorBlendFactor = bEnableAlphaBlending ? VK_BLEND_FACTOR_SRC_ALPHA : VK_BLEND_FACTOR_ONE;
+		colorBlendAttachment.dstColorBlendFactor = bEnableAlphaBlending ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : VK_BLEND_FACTOR_ZERO;
 		colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
 		colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
 		colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
@@ -972,7 +1146,7 @@ namespace xrlib
 	}
 
 	VkPipelineColorBlendStateCreateInfo CStereoRender::GeneratePipelineStateCI_ColorBlendCI(
-		std::vector< VkPipelineColorBlendAttachmentState > &vecColorBlenAttachmentStates,
+		std::vector< VkPipelineColorBlendAttachmentState > &vecColorBlendAttachmentStates,
 		VkBool32 logicOpEnable,
 		VkLogicOp logicOp,
 		VkPipelineColorBlendStateCreateFlags createFlags,
@@ -981,8 +1155,8 @@ namespace xrlib
 		VkPipelineColorBlendStateCreateInfo colorBlendCI { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
 		colorBlendCI.pNext = pNext;
 		colorBlendCI.flags = createFlags;
-		colorBlendCI.attachmentCount = vecColorBlenAttachmentStates.empty() ? 0 : (uint32_t)vecColorBlenAttachmentStates.size();
-		colorBlendCI.pAttachments = vecColorBlenAttachmentStates.empty() ? nullptr : vecColorBlenAttachmentStates.data();
+		colorBlendCI.attachmentCount = vecColorBlendAttachmentStates.empty() ? 0 : (uint32_t)vecColorBlendAttachmentStates.size();
+		colorBlendCI.pAttachments = vecColorBlendAttachmentStates.empty() ? nullptr : vecColorBlendAttachmentStates.data();
 		colorBlendCI.logicOpEnable = logicOpEnable;
 		colorBlendCI.logicOp = logicOp;
 		
@@ -1004,8 +1178,8 @@ namespace xrlib
 	}
 
 	VkResult CStereoRender::CreateGraphicsPipeline(
+		VkPipelineLayout &outPipelineLayout,
 		VkPipeline &outPipeline,
-		VkPipelineLayout pipelineLayout,
 		VkRenderPass renderPass,
 		std::vector< VkPipelineShaderStageCreateInfo > &vecShaderStages,
 		const VkPipelineVertexInputStateCreateInfo *pVertexInputCI,
@@ -1029,7 +1203,7 @@ namespace xrlib
 		pipelineCI.pNext = pNext;
 		pipelineCI.flags = createFlags;
 
-		pipelineCI.layout = pipelineLayout;
+		pipelineCI.layout = outPipelineLayout;
 		pipelineCI.renderPass = renderPass;
 		pipelineCI.subpass = unSubpassIndex;
 
@@ -1053,8 +1227,8 @@ namespace xrlib
 				AAssetManager *assetManager,
 		#endif
 		uint32_t unSubpassIndex,
+		VkPipelineLayout &outPipelineLayout,
 		VkPipeline &outPipeline,
-		SGraphicsPipelineLayout &pipelineLayout,
 		VkRenderPass vkRenderPass,
 		std::string sVertexShaderFilename,
 		std::string sFragmentShaderFilename )
@@ -1064,16 +1238,32 @@ namespace xrlib
 		assert( !sVertexShaderFilename.empty() );
 		assert( !sFragmentShaderFilename.empty() );
 
-		// (1) Create pipeline layout with push constant definitions for the shader
-		std::vector< VkPushConstantRange > vecPCRs = { { VK_SHADER_STAGE_VERTEX_BIT, 0, pipelineLayout.size } };
-		std::vector< VkDescriptorSetLayout > vecLayouts;
-		VkPipelineLayoutCreateInfo pipelineLayoutCI = GeneratePipelineLayoutCI( vecPCRs, vecLayouts );
+		// Create descriptor set layout for joint matrices
+		VkDescriptorSetLayoutBinding jointMatricesBinding = {
+			0,								   // binding
+			VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // descriptorType
+			1,								   // descriptorCount
+			VK_SHADER_STAGE_VERTEX_BIT,		   // stageFlags
+			nullptr							   // pImmutableSamplers
+		};
 
-		VkResult result = vkCreatePipelineLayout( GetLogicalDevice(), &pipelineLayoutCI, nullptr, &pipelineLayout.layout );
+		VkDescriptorSetLayoutCreateInfo dsLayoutCI = { VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, nullptr, 0, 1, &jointMatricesBinding };
+
+		VkDescriptorSetLayout jointMatricesSetLayout;
+		vkCreateDescriptorSetLayout( GetLogicalDevice(), &dsLayoutCI, nullptr, &jointMatricesSetLayout );
+
+		// Now include this in your pipeline layout creation
+		std::vector< VkDescriptorSetLayout > vecLayouts = { jointMatricesSetLayout };
+
+		// Create pipeline layout with push constant definitions for the shader
+		std::vector< VkPushConstantRange > vecPCRs = { { VK_SHADER_STAGE_VERTEX_BIT, 0, k_pcrSize } };
+
+		VkPipelineLayoutCreateInfo pipelineLayoutCI = GeneratePipelineLayoutCI( vecPCRs, vecLayouts );
+		VkResult result = vkCreatePipelineLayout( GetLogicalDevice(), &pipelineLayoutCI, nullptr, &outPipelineLayout );
 		if ( !VK_CHECK_SUCCESS( result ) )
 			return result;
 
-		// (2) Setup shader set
+		// Setup shader set
 		SShaderSet *pShaders = new SShaderSet( sVertexShaderFilename, sFragmentShaderFilename );
 
 		#ifdef XR_USE_PLATFORM_ANDROID
@@ -1082,19 +1272,19 @@ namespace xrlib
 				pShaders->Init( GetLogicalDevice() );
 		#endif
 
-		// (3) Define shader vertex inputs
+		// Define shader vertex inputs
 		pShaders->vertexBindings.push_back( { 0, sizeof( XrVector2f ), VK_VERTEX_INPUT_RATE_VERTEX } );
 		pShaders->vertexAttributes.push_back( { 0, 0, VK_FORMAT_R32G32_SFLOAT } );
 
 		auto vertexInputCI = GeneratePipelineStateCI_VertexInput( pShaders->vertexBindings, pShaders->vertexAttributes );
 
-		// (4) Define viewport
+		// Define viewport
 		std::vector< VkViewport > vecViewports { { 0.0f, 0.0f, (float) GetTextureWidth(), (float) GetTextureHeight(), 0.0f, 1.0f } }; // Will invert y after projection
 		std::vector< VkRect2D > vecScissors { { { 0, 0 }, GetTextureExtent() } };
 
 		auto viewportCI = GeneratePipelineStateCI_ViewportCI( vecViewports, vecScissors );
 
-		// (5) Define other pipeline states
+		// Define other pipeline states
 		auto assemblyCI = GeneratePipelineStateCI_Assembly();
 		auto multisampleCI = GeneratePipelineStateCI_MultisampleCI();
 		auto depthStencilCI = GeneratePipelineStateCI_DepthStencilCI();
@@ -1103,7 +1293,7 @@ namespace xrlib
 		rasterizationCI.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasterizationCI.cullMode = VK_CULL_MODE_NONE;
 
-		// (6) Configure Depth
+		// Configure Depth
 		if ( m_pSession->GetVulkan()->IsDepthFormat( m_vkDepthFormat ) )
 		{
 			// Enable depth testing and writing
@@ -1129,10 +1319,10 @@ namespace xrlib
 			depthStencilCI.depthBoundsTestEnable = VK_FALSE;
 		}
 
-		// (7) Create graphics pipeline
+		// Create graphics pipeline
 		result = CreateGraphicsPipeline(
+			outPipelineLayout, 
 			outPipeline, 
-			pipelineLayout.layout, 
 			vkRenderPass, 
 			pShaders->stages, 
 			&vertexInputCI, 
@@ -1150,7 +1340,7 @@ namespace xrlib
 		if ( !VK_CHECK_SUCCESS( result ) )
 			return result;
 
-		// (8) Cleanup
+		// Cleanup
 		delete pShaders;
 		return VK_SUCCESS;
 	}
@@ -1159,8 +1349,8 @@ namespace xrlib
 		#ifdef XR_USE_PLATFORM_ANDROID
 				AAssetManager *assetManager,
 		#endif
+		VkPipelineLayout &outPipelineLayout,
 		std::vector< VkPipeline > &outPipelines,
-		SGraphicsPipelineLayout &pipelineLayout,
 		VkRenderPass vkRenderPass,
 		std::vector< std::string > vecVertexShaders,
 		std::vector< std::string > vecFragmentShaders )
@@ -1177,8 +1367,8 @@ namespace xrlib
 				assetManager,
 			#endif
 				i,
+				outPipelineLayout,
 				outPipelines[ i ],
-				pipelineLayout,
 				vkRenderPass,
 				vecVertexShaders[ i ],
 				vecFragmentShaders[ i ] );
@@ -1194,28 +1384,26 @@ namespace xrlib
 		#ifdef XR_USE_PLATFORM_ANDROID
 			AAssetManager *assetManager,
 		#endif
+		VkPipelineLayout &outPipelineLayout,
 		VkPipeline &outPipeline,
-		SGraphicsPipelineLayout &pipelineLayout,
 		VkRenderPass vkRenderPass,
 		std::string sVertexShaderFilename,
 		std::string sFragmentShaderFilename ) 
 	{ 
-		assert( GetLogicalDevice() != VK_NULL_HANDLE );
-		assert( vkRenderPass != VK_NULL_HANDLE );
-		assert( !sVertexShaderFilename.empty() );
-		assert( !sFragmentShaderFilename.empty() );
+		assert( GetLogicalDevice() && vkRenderPass && !sVertexShaderFilename.empty() && !sFragmentShaderFilename.empty() );
 
-		// (1) Create pipeline layout with push constant definitions for the shader
-		std::vector< VkPushConstantRange > vecPCRs = { { VK_SHADER_STAGE_VERTEX_BIT, 0, pipelineLayout.size } };
-		std::vector< VkDescriptorSetLayout > vecLayouts;
-		VkPipelineLayoutCreateInfo pipelineLayoutCI = GeneratePipelineLayoutCI( vecPCRs, vecLayouts );
+		// Create pipeline layout if needed
+		if ( outPipelineLayout == VK_NULL_HANDLE )
+		{
+			std::vector< VkPushConstantRange > pcRanges = { GetEyeMatricesPushConstant() };
+			std::vector< VkDescriptorSetLayout > vecDescriptorSetLayouts;
+			VkPipelineLayoutCreateInfo layoutCI = GeneratePipelineLayoutCI( pcRanges, vecDescriptorSetLayouts );
+			VK_CHECK_RESULT( vkCreatePipelineLayout( GetLogicalDevice(), &layoutCI, nullptr, &outPipelineLayout ) );
+		}
 
-		VkResult result = vkCreatePipelineLayout( GetLogicalDevice(), &pipelineLayoutCI, nullptr, &pipelineLayout.layout );
-		if ( !VK_CHECK_SUCCESS( result ) )
-			return result;
-
-		// (2) Setup shader set
+		// Setup shader set with primitive vertex attributes
 		SShaderSet *pShaders = new SShaderSet( sVertexShaderFilename, sFragmentShaderFilename );
+		SetupPrimitiveVertexAttributes( *pShaders );
 
 		#ifdef XR_USE_PLATFORM_ANDROID
 			pShaders->Init( assetManager, GetLogicalDevice() );
@@ -1223,105 +1411,378 @@ namespace xrlib
 			pShaders->Init( GetLogicalDevice() );
 		#endif
 
-		// (3) Define shader vertex inputs
-		pShaders->vertexBindings.push_back( { 0, sizeof( SColoredVertex ), VK_VERTEX_INPUT_RATE_VERTEX } );
-		pShaders->vertexAttributes.push_back( { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof( SColoredVertex, position ) } );
-		pShaders->vertexAttributes.push_back( { 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof( SColoredVertex, color ) } );
+		// Create pipeline state
+		SPipelineStateInfo state = CreateDefaultPipelineState( 
+			pShaders->vertexBindings, 
+			pShaders->vertexAttributes, 
+			GetTextureWidth(), 
+			GetTextureHeight() );
+		state.rasterization.frontFace = VK_FRONT_FACE_CLOCKWISE;
 
-		pShaders->vertexBindings.push_back( { 1, sizeof( XrMatrix4x4f ), VK_VERTEX_INPUT_RATE_INSTANCE } );
-		uint32_t sizeFloat = (uint32_t) sizeof( float );
-		pShaders->vertexAttributes.push_back( { 2, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0 } );
-		pShaders->vertexAttributes.push_back( { 3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 4 * sizeFloat } );
-		pShaders->vertexAttributes.push_back( { 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 8 * sizeFloat } );
-		pShaders->vertexAttributes.push_back( { 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 12 * sizeFloat } );
+		ConfigureDepthStencil( state.depthStencil, m_bUseVisMask, m_vkDepthFormat );
 
-		auto vertexInputCI = GeneratePipelineStateCI_VertexInput( pShaders->vertexBindings, pShaders->vertexAttributes );
+		// Create pipeline
+		VkResult result = CreateGraphicsPipeline(
+			outPipelineLayout,
+			outPipeline,
+			vkRenderPass,
+			pShaders->stages,
+			&state.vertexInput,
+			&state.assembly,
+			nullptr,
+			&state.viewport,
+			&state.rasterization,
+			&state.multisample,
+			&state.depthStencil,
+			&state.colorBlend,
+			&state.dynamicState,
+			VK_NULL_HANDLE,
+			m_bUseVisMask ? 2 : 0 );
 
-		// (4) Define viewport
-		std::vector< VkViewport > vecViewports { { 0.0f, 0.0f, (float) GetTextureWidth(), (float) GetTextureHeight(), 0.0f, 1.0f } }; // Will invert y after projection
-		std::vector< VkRect2D > vecScissors { { { 0, 0 }, GetTextureExtent() } };
-
-		auto viewportCI = GeneratePipelineStateCI_ViewportCI( vecViewports, vecScissors );
-
-		// (5) Setup color blend attachments
-		std::vector< VkPipelineColorBlendAttachmentState > vecColorBlendAttachments { GenerateColorBlendAttachment() };
-		auto colorBlendCI = GeneratePipelineStateCI_ColorBlendCI( vecColorBlendAttachments );
-
-		// (6) Define Dynamic states
-		std::vector< VkDynamicState > vecDynamicStates; // { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-		auto dynamicStateCI = GeneratePipelineStateCI_DynamicStateCI( vecDynamicStates );
-
-		// (7) Define other pipeline states
-		auto assemblyCI = GeneratePipelineStateCI_Assembly();
-		auto rasterizationCI = GeneratePipelineStateCI_RasterizationCI();
-		auto multisampleCI = GeneratePipelineStateCI_MultisampleCI();
-		auto depthStencilCI = GeneratePipelineStateCI_DepthStencilCI();
-
-		// (8) Configure Depth
-		if ( m_pSession->GetVulkan()->IsDepthFormat( m_vkDepthFormat ) )
-		{
-			// Enable depth testing and writing
-			depthStencilCI.depthTestEnable = VK_TRUE;			// Enable depth testing
-			depthStencilCI.depthWriteEnable = VK_TRUE;			// Enable depth writing
-			depthStencilCI.depthCompareOp = VK_COMPARE_OP_NOT_EQUAL; 
-
-			//Set stencil test
-			depthStencilCI.stencilTestEnable = m_bUseVisMask ? VK_TRUE : VK_FALSE;
-
-			// Depth bounds - no testing to save a bit of overhead 
-			depthStencilCI.depthBoundsTestEnable = VK_FALSE;
-
-			 if ( m_bUseVisMask )
-			{
-				// Configure stencil operations if the stencil test is enabled
-				depthStencilCI.front.failOp = VK_STENCIL_OP_KEEP;	
-				depthStencilCI.front.passOp = VK_STENCIL_OP_KEEP;	   
-				depthStencilCI.front.depthFailOp = VK_STENCIL_OP_KEEP; 
-				depthStencilCI.front.compareOp = VK_COMPARE_OP_NOT_EQUAL;  
-
-				depthStencilCI.front.compareMask = 0xFF; // Use all stencil bits
-				depthStencilCI.front.writeMask = 0x00;	 // Disable writes to stencil bits
-				depthStencilCI.front.reference = 1;		
-
-				depthStencilCI.back = depthStencilCI.front; // Configure back face with the same settings
-			}
-		}
-
-		// (9) Create graphics pipeline
-		result = CreateGraphicsPipeline(
-			outPipeline, 
-			pipelineLayout.layout, 
-			vkRenderPass, 
-			pShaders->stages, 
-			&vertexInputCI, 
-			&assemblyCI, 
-			nullptr, 
-			&viewportCI, 
-			&rasterizationCI, 
-			&multisampleCI, 
-			&depthStencilCI, 
-			&colorBlendCI, 
-			&dynamicStateCI, 
-			VK_NULL_HANDLE, 
-			m_bUseVisMask ? 2 : 0	// @todo: two subpasses, one for each eye until khr vismask spec supports multiview
-		); 
-
-		if ( !VK_CHECK_SUCCESS( result ) )
-			return result;
-
-		// (10) Cleanup
 		delete pShaders;
-		return VK_SUCCESS; 
+		return result;
 	}
 
-	VkResult CStereoRender::AddRenderPass( VkRenderPassCreateInfo *renderPassCI, VkAllocationCallbacks *pAllocator ) 
+	VkResult CStereoRender::CreateGraphicsPipeline_PBR( 		
+	#ifdef XR_USE_PLATFORM_ANDROID
+		AAssetManager *assetManager,
+	#endif 
+		SPipelines &outPipelines, 
+		uint32_t &outPipelineIndex,
+		CRenderInfo *pRenderInfo,
+		uint32_t unPbrDescriptorPoolCount,
+		VkRenderPass vkRenderPass, 
+		std::string sVertexShaderFilename, 
+		std::string sFragmentShaderFilename,
+		bool bCreateAsMainPBRPipeline )
+	{
+		assert( pRenderInfo && unPbrDescriptorPoolCount > 0 );
+
+		SShaderSet *pShaderSet = new SShaderSet( sVertexShaderFilename, sFragmentShaderFilename );
+		SetupPBRVertexAttributes( *pShaderSet );
+
+		#ifdef XR_USE_PLATFORM_ANDROID
+			pShaderSet->Init( assetManager, GetLogicalDevice() );
+		#else
+			pShaderSet->Init( GetLogicalDevice() );
+		#endif
+
+		if ( bCreateAsMainPBRPipeline )
+		{
+			VK_CHECK_RESULT( SetupPBRDescriptors( outPipelines, pRenderInfo, unPbrDescriptorPoolCount ) );
+			outPipelines.pbrLayout = pRenderInfo->AddNewLayout();
+		}
+
+		outPipelineIndex = pRenderInfo->AddNewPipeline();
+		if ( bCreateAsMainPBRPipeline )
+		{
+			outPipelines.pbr = outPipelineIndex;
+		}
+
+		std::vector< VkDescriptorSetLayout > layouts = { pRenderInfo->pDescriptors->GetDescriptorSetLayout( outPipelines.pbrFragmentDescriptorLayout ), pRenderInfo->pDescriptors->GetDescriptorSetLayout( pRenderInfo->lightingLayoutId ) };
+
+		SPipelineCreationParams params { 
+			.renderPass = vkRenderPass, 
+			.useVisMask = m_bUseVisMask, 
+			.depthFormat = m_vkDepthFormat, 
+			.subpassIndex = static_cast< uint32_t >( m_bUseVisMask ? 2 : 0 ) 
+		};
+
+		return CreateBasePipeline( 
+			pRenderInfo->vecPipelineLayouts[ outPipelines.pbrLayout ], 
+			pRenderInfo->vecGraphicsPipelines[ outPipelineIndex ], 
+			pShaderSet, 
+			params, 
+			layouts );
+	}
+
+	VkResult CStereoRender::CreateGraphicsPipeline_CustomPBR(
+		#ifdef XR_USE_PLATFORM_ANDROID
+			AAssetManager *assetManager,
+		#endif 
+		SPipelines &outPipelines,
+		uint32_t &outPipelineIndex,
+		CRenderInfo *pRenderInfo,
+		VkRenderPass vkRenderPass,
+		const std::string &sVertexShaderFilename,
+		const std::string &sFragmentShaderFilename,
+		SPipelineStateInfo &pipelineState,
+		bool bCreateAsMainPBRPipeline,
+		uint32_t unDescriptorPoolCount )
+	{
+		assert( pRenderInfo && !sVertexShaderFilename.empty() && !sFragmentShaderFilename.empty() );
+
+		SShaderSet *pShaderSet = new SShaderSet( sVertexShaderFilename, sFragmentShaderFilename );
+		SetupPBRVertexAttributes( *pShaderSet );
+
+		#ifdef XR_USE_PLATFORM_ANDROID
+			pShaderSet->Init( assetManager, GetLogicalDevice() );
+		#else
+			pShaderSet->Init( GetLogicalDevice() );
+		#endif
+
+		pipelineState.vertexInput = GeneratePipelineStateCI_VertexInput( pShaderSet->vertexBindings, pShaderSet->vertexAttributes ); 
+
+		std::vector< VkDescriptorSetLayout > layouts;
+		if ( bCreateAsMainPBRPipeline )
+		{
+			VK_CHECK_RESULT( SetupPBRDescriptors( outPipelines, pRenderInfo, unDescriptorPoolCount ) );
+			layouts.push_back( pRenderInfo->pDescriptors->GetDescriptorSetLayout( outPipelines.pbrFragmentDescriptorLayout ) );
+
+			outPipelines.pbrLayout = pRenderInfo->AddNewLayout();
+		}
+
+		outPipelineIndex = pRenderInfo->AddNewPipeline();
+		if ( bCreateAsMainPBRPipeline )
+		{
+			outPipelines.pbr = outPipelineIndex;
+		}
+
+		return CreateGraphicsPipeline(
+			pRenderInfo->vecPipelineLayouts[ outPipelines.pbrLayout ],
+			pRenderInfo->vecGraphicsPipelines[ outPipelineIndex ],
+			vkRenderPass,
+			pShaderSet->stages,
+			&pipelineState.vertexInput,
+			&pipelineState.assembly,
+			nullptr,
+			&pipelineState.viewport,
+			&pipelineState.rasterization,
+			&pipelineState.multisample,
+			&pipelineState.depthStencil,
+			&pipelineState.colorBlend,
+			&pipelineState.dynamicState,
+			VK_NULL_HANDLE,
+			m_bUseVisMask ? 2 : 0 );
+	}
+
+	VkResult CStereoRender::CreateGraphicsPipeline(
+		VkPipelineLayout &outLayout, 
+		VkPipeline &outPipeline, 
+		VkRenderPass vkRenderPass, 
+		std::vector< VkDescriptorSetLayout > &vecLayouts,
+		SShaderSet *pShaderSet_WillBeDestroyed ) 
+	{ 
+		assert( GetLogicalDevice() != VK_NULL_HANDLE && vkRenderPass != VK_NULL_HANDLE && pShaderSet_WillBeDestroyed );
+
+		// Create pipeline layout if needed
+		if ( outLayout == VK_NULL_HANDLE && !vecLayouts.empty() )
+		{
+			std::vector< VkPushConstantRange > vecPCRs = { GetEyeMatricesPushConstant() };
+			VkPipelineLayoutCreateInfo layoutCI = GeneratePipelineLayoutCI( vecPCRs, vecLayouts );
+			VK_CHECK_RESULT( vkCreatePipelineLayout( GetLogicalDevice(), &layoutCI, nullptr, &outLayout ) );
+		}
+
+		// Create default pipeline state
+		SPipelineStateInfo state = CreateDefaultPipelineState( 
+			pShaderSet_WillBeDestroyed->vertexBindings, 
+			pShaderSet_WillBeDestroyed->vertexAttributes, 
+			GetTextureWidth(), 
+			GetTextureHeight() );
+
+		// Configure depth-stencil state
+		ConfigureDepthStencil( state.depthStencil, m_bUseVisMask, m_vkDepthFormat );
+
+		// Create pipeline
+		VkResult result = CreateGraphicsPipeline(
+			outLayout,
+			outPipeline,
+			vkRenderPass,
+			pShaderSet_WillBeDestroyed->stages,
+			&state.vertexInput,
+			&state.assembly,
+			nullptr,
+			&state.viewport,
+			&state.rasterization,
+			&state.multisample,
+			&state.depthStencil,
+			&state.colorBlend,
+			&state.dynamicState,
+			VK_NULL_HANDLE,
+			static_cast< uint32_t > ( m_bUseVisMask ? 2 : 0 ) );
+
+		delete pShaderSet_WillBeDestroyed;
+		return result;
+	}
+
+	SPipelineStateInfo CStereoRender::CreateDefaultPipelineState( 
+		std::vector< VkVertexInputBindingDescription > &bindings, 
+		std::vector< VkVertexInputAttributeDescription > &attributes, 
+		uint32_t textureWidth, 
+		uint32_t textureHeight )
+	{
+		SPipelineStateInfo info = CreateDefaultPipelineState( textureWidth, textureHeight );
+		info.vertexInput = GeneratePipelineStateCI_VertexInput( bindings, attributes ); 
+		return info;
+	}
+
+	SPipelineStateInfo CStereoRender::CreateDefaultPipelineState( uint32_t textureWidth, uint32_t textureHeight ) 
+	{ 
+		SPipelineStateInfo info;
+
+		info.viewports = { { 0.0f, 0.0f, (float) textureWidth, (float) textureHeight, 0.0f, 1.0f } };
+		info.scissors = { { { 0, 0 }, { textureWidth, textureHeight } } };
+
+		info.viewport = GeneratePipelineStateCI_ViewportCI( info.viewports, info.scissors );
+		info.colorBlendAttachments = { GenerateColorBlendAttachment() };
+		info.colorBlend = GeneratePipelineStateCI_ColorBlendCI( info.colorBlendAttachments );
+		info.dynamicState = GeneratePipelineStateCI_DynamicStateCI( info.dynamicStates );
+		info.assembly = GeneratePipelineStateCI_Assembly();
+		info.rasterization = GeneratePipelineStateCI_RasterizationCI();
+		info.rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+		info.multisample = GeneratePipelineStateCI_MultisampleCI();
+		info.depthStencil = GeneratePipelineStateCI_DepthStencilCI();
+
+		return info;
+	}
+
+	void CStereoRender::ConfigureDepthStencil( 
+		VkPipelineDepthStencilStateCreateInfo &outDepthStencilCI, 
+		bool bUseVisMask, 
+		VkFormat depthFormat ) 
+	{
+		if ( m_pSession->GetVulkan()->IsDepthFormat( depthFormat ) )
+		{
+			outDepthStencilCI.depthTestEnable = VK_TRUE;
+			outDepthStencilCI.depthWriteEnable = VK_TRUE;
+			outDepthStencilCI.depthCompareOp = VK_COMPARE_OP_LESS;
+			outDepthStencilCI.stencilTestEnable = bUseVisMask ? VK_TRUE : VK_FALSE;
+			outDepthStencilCI.depthBoundsTestEnable = VK_FALSE;
+
+			if ( bUseVisMask )
+			{
+				VkStencilOpState stencilState { 
+					.failOp = VK_STENCIL_OP_KEEP, 
+					.passOp = VK_STENCIL_OP_KEEP, 
+					.depthFailOp = VK_STENCIL_OP_KEEP, 
+					.compareOp = VK_COMPARE_OP_NOT_EQUAL, 
+					.compareMask = 0xFF,	// Use all stencil bits
+					.writeMask = 0x00,		// Disable writes to stencil bits
+					.reference = 1 };
+
+				outDepthStencilCI.front = stencilState;
+				outDepthStencilCI.back = stencilState;
+			}
+		}
+	}
+
+	VkResult CStereoRender::SetupPBRDescriptors( 
+		SPipelines &outPipelines, 
+		CRenderInfo *pRenderInfo, 
+		uint32_t poolCount ) 
+	{ 
+
+		std::vector< SDescriptorBinding > pbrBindings = {
+		{ 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT },
+		{ 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT },
+		{ 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT },
+		{ 3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT },
+		{ 4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT },
+		{ 5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT } };
+
+		VK_CHECK_RESULT( pRenderInfo->pDescriptors->CreateDescriptorSetLayout( outPipelines.pbrFragmentDescriptorLayout, pbrBindings ) );
+
+		VK_CHECK_RESULT( pRenderInfo->pDescriptors->CreateDescriptorPool( outPipelines.pbrFragmentDescriptorPool, outPipelines.pbrFragmentDescriptorLayout, poolCount ) );
+
+		// Setup lighting descriptors
+		VkDescriptorPoolSize lightingPoolSize { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1 };
+
+		VkDescriptorPoolCreateInfo lightingPoolInfo { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &lightingPoolSize };
+
+		VK_CHECK_RESULT( pRenderInfo->pDescriptors->CreateDescriptorPool( pRenderInfo->lightingPoolId, lightingPoolInfo ) );
+
+		std::vector< SDescriptorBinding > lightingBindings = { { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT } };
+
+		VK_CHECK_RESULT( pRenderInfo->pDescriptors->CreateDescriptorSetLayout( pRenderInfo->lightingLayoutId, lightingBindings ) );
+
+		pRenderInfo->SetupSceneLighting();
+
+		return VK_SUCCESS;
+	}
+
+	void CStereoRender::SetupPrimitiveVertexAttributes( SShaderSet &shaderSet ) 
+	{
+		// Vertex data binding
+		shaderSet.vertexBindings = { { 0, sizeof( SColoredVertex ), VK_VERTEX_INPUT_RATE_VERTEX }, { 1, sizeof( XrMatrix4x4f ), VK_VERTEX_INPUT_RATE_INSTANCE } };
+
+		// Vertex attributes
+		uint32_t sizeFloat = sizeof( float );
+		shaderSet.vertexAttributes = {
+			{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof( SColoredVertex, position ) },
+			{ 1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof( SColoredVertex, color ) },
+			{ 2, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0 },
+			{ 3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 4 * sizeFloat },
+			{ 4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 8 * sizeFloat },
+			{ 5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 12 * sizeFloat } };
+	}
+
+	void CStereoRender::SetupPBRVertexAttributes( SShaderSet &shaderSet ) 
+	{
+		shaderSet.vertexBindings = { { 0, sizeof( SMeshVertex ), VK_VERTEX_INPUT_RATE_VERTEX }, { 1, sizeof( XrMatrix4x4f ), VK_VERTEX_INPUT_RATE_INSTANCE } };
+
+		shaderSet.vertexAttributes = {
+			{ 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof( SMeshVertex, position ) },
+			{ 1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof( SMeshVertex, normal ) },
+			{ 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof( SMeshVertex, tangent ) },
+			{ 3, 0, VK_FORMAT_R32G32_SFLOAT, offsetof( SMeshVertex, uv0 ) },
+			{ 4, 0, VK_FORMAT_R32G32_SFLOAT, offsetof( SMeshVertex, uv1 ) },
+			{ 5, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof( SMeshVertex, color0 ) },
+			{ 6, 0, VK_FORMAT_R32G32B32A32_SINT, offsetof( SMeshVertex, joints ) },
+			{ 7, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof( SMeshVertex, weights ) },
+			{ 8, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0 },
+			{ 9, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16 },
+			{ 10, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 32 },
+			{ 11, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 48 } };
+	}
+
+	VkResult CStereoRender::CreateBasePipeline( 
+		VkPipelineLayout &outLayout, 
+		VkPipeline &outPipeline, 
+		SShaderSet *pShaderSet, 
+		const SPipelineCreationParams &params, 
+		std::vector< VkDescriptorSetLayout > &layouts ) 
+	{ 
+		
+		if ( outLayout == VK_NULL_HANDLE && !layouts.empty() )
+		{
+			std::vector< VkPushConstantRange > pcRanges = { GetEyeMatricesPushConstant() };
+			VkPipelineLayoutCreateInfo layoutCI = GeneratePipelineLayoutCI( pcRanges, layouts );
+			VK_CHECK_RESULT( vkCreatePipelineLayout( GetLogicalDevice(), &layoutCI, nullptr, &outLayout ) );
+		}
+
+		SPipelineStateInfo state = CreateDefaultPipelineState( 
+			pShaderSet->vertexBindings, 
+			pShaderSet->vertexAttributes, 
+			GetTextureWidth(), 
+			GetTextureHeight() );
+
+		ConfigureDepthStencil( state.depthStencil, params.useVisMask, params.depthFormat );
+
+		return CreateGraphicsPipeline(
+			outLayout,
+			outPipeline,
+			params.renderPass,
+			pShaderSet->stages,
+			&state.vertexInput,
+			&state.assembly,
+			nullptr,
+			&state.viewport,
+			&state.rasterization,
+			&state.multisample,
+			&state.depthStencil,
+			&state.colorBlend,
+			&state.dynamicState,
+			VK_NULL_HANDLE,
+			params.subpassIndex );
+	}
+
+	VkResult CStereoRender::AddRenderPass( VkRenderPassCreateInfo2 *renderPassCI, VkAllocationCallbacks *pAllocator ) 
 	{ 
 		assert( renderPassCI );
-		assert( renderPassCI->sType == VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO );
 
 		vecRenderPasses.push_back( VK_NULL_HANDLE );
 
-		VkResult result = vkCreateRenderPass( GetLogicalDevice(), renderPassCI, nullptr, &vecRenderPasses.back() ); 
+		VkResult result = vkCreateRenderPass2( GetLogicalDevice(), renderPassCI, nullptr, &vecRenderPasses.back() ); 
 		if ( result != VK_SUCCESS )
 		{
 			vecRenderPasses.pop_back();
@@ -1332,227 +1793,199 @@ namespace xrlib
 	}
 
 	void CStereoRender::RenderFrame( 
-		VkRenderPass renderPass, 
-		SRenderFrameInfo &renderInfo, 
-		std::vector< CColoredPrimitive * > &primitives, 
+		const VkRenderPass renderPass, 
+		CRenderInfo *pRenderInfo, 
 		std::vector< CPlane2D * > &stencils ) 
+	{ 
+		if( StartRenderFrame( pRenderInfo ) )
+			EndRenderFrame( renderPass, pRenderInfo, stencils );
+	}
+
+	bool CStereoRender::StartRenderFrame( CRenderInfo* pRenderInfo ) 
 	{
-		// (1) Start frame
-		if ( !XR_UNQUALIFIED_SUCCESS( m_pSession->StartFrame( &renderInfo.frameState ) ) )
-			return;
+		if ( !XR_UNQUALIFIED_SUCCESS( m_pSession->StartFrame( &pRenderInfo->state.frameState ) ) )
+			return false;
 
-		// (2) Render frame
-		if ( renderInfo.frameState.shouldRender )
+		return true;
+	}
+
+	void CStereoRender::EndRenderFrame( const VkRenderPass renderPass, CRenderInfo *pRenderInfo, std::vector< CPlane2D * > &stencils ) 
+	{
+		auto &state = pRenderInfo->state;
+
+		// Render frame
+		if ( state.frameState.shouldRender )
 		{
-			#if defined( _WIN32 ) && defined( RENDERDOC_ENABLE )
-				if ( rdoc_api && rdoc_api->GetNumCaptures() < RENDERDOC_FRAME_SAMPLES )
-				{
-					rdoc_api->StartFrameCapture( RENDERDOC_DEVICEPOINTER_FROM_VKINSTANCE( m_pSession->GetVulkan()->GetVkInstance() ), NULL );
-					LogDebug( "RENDERDOC", "Renderdoc capture started for frame: %i", rdoc_api->GetNumCaptures() + 1 );
-				}
-			#endif
-
-			// (2.1) Update eye view pose, fov, etc
-			m_pSession->UpdateEyeStates( 
-				m_vecEyeViews, 
-				renderInfo.eyeProjectionMatrices, 
-				&renderInfo.sharedEyeState, 
-				&renderInfo.frameState, 
-				m_pSession->GetAppSpace(),
-				renderInfo.nearZ,
-				renderInfo.farZ );
-
-			// Only render if updated eye orientation is valid
-			if ( renderInfo.sharedEyeState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT )
+#if defined( _WIN32 ) && defined( RENDERDOC_ENABLE )
+			if ( rdoc_api && rdoc_api->GetNumCaptures() < RENDERDOC_FRAME_SAMPLES )
 			{
-				// (XX) Update Hmd pose
-				m_pSession->UpdateHmdPose( renderInfo.frameState.predictedDisplayTime + renderInfo.frameState.predictedDisplayPeriod );
-				m_pSession->GetHmdPose( renderInfo.hmdPose );
+				rdoc_api->StartFrameCapture( RENDERDOC_DEVICEPOINTER_FROM_VKINSTANCE( m_pSession->GetVulkan()->GetVkInstance() ), NULL );
+				LogDebug( "RENDERDOC", "Renderdoc capture started for frame: %i", rdoc_api->GetNumCaptures() + 1 );
+			}
+#endif
 
-				
-				// (2.3) Acquire swapchain images
-				m_pSession->AcquireFrameImage( &renderInfo.unCurrentSwapchainImage_Color, &renderInfo.unCurrentSwapchainImage_Depth, GetColorSwapchain(), GetDepthSwapchain() );
+			// Update eye view pose, fov, etc
+			m_pSession->UpdateEyeStates( m_vecEyeViews, state.eyeProjectionMatrices, &state.sharedEyeState, &state.frameState, m_pSession->GetAppSpace(), state.nearZ, state.farZ );
 
-				// (2.11) Wait for swapchain images. This ensures that the openxr runtime is finish with them before we submit the draw commands to the gpu
+			// DRAW CALLS
+			if ( state.sharedEyeState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT )
+			{
+				// Update Hmd pose
+				m_pSession->UpdateHmdPose( state.frameState.predictedDisplayTime + state.frameState.predictedDisplayPeriod );
+				m_pSession->GetHmdPose( state.hmdPose );
+
+				// Acquire swapchain images
+				m_pSession->AcquireFrameImage( &state.unCurrentSwapchainImage_Color, &state.unCurrentSwapchainImage_Depth, GetColorSwapchain(), GetDepthSwapchain() );
+
+				// Wait for swapchain images. This ensures that the openxr runtime is finish with them before we submit the draw commands to the gpu
 				m_pSession->WaitForFrameImage( GetColorSwapchain(), GetDepthSwapchain() );
 
-				// (2.2) Update frame layers (eye projection views)
+				// Update frame layers (eye projection views)
 				for ( uint32_t i = 0; i < k_EyeCount; i++ )
 				{
-					renderInfo.projectionLayerViews[ i ].pose = m_vecEyeViews[ i ].pose;
-					renderInfo.projectionLayerViews[ i ].fov = m_vecEyeViews[ i ].fov;
-					renderInfo.projectionLayerViews[ i ].subImage.swapchain = GetColorSwapchain();
-					renderInfo.projectionLayerViews[ i ].subImage.imageArrayIndex = i;
-					renderInfo.projectionLayerViews[ i ].subImage.imageRect.offset = { 0, 0 };
-					renderInfo.projectionLayerViews[ i ].subImage.imageRect.extent = GetTexutreExtent2Di();
+					state.projectionLayerViews[ i ].pose = m_vecEyeViews[ i ].pose;
+					state.projectionLayerViews[ i ].fov = m_vecEyeViews[ i ].fov;
+					state.projectionLayerViews[ i ].subImage.swapchain = GetColorSwapchain();
+					state.projectionLayerViews[ i ].subImage.imageArrayIndex = i;
+					state.projectionLayerViews[ i ].subImage.imageRect.offset = { 0, 0 };
+					state.projectionLayerViews[ i ].subImage.imageRect.extent = GetTexutreExtent2Di();
 
 					XrCompositionLayerDepthInfoKHR depthInfo { XR_TYPE_COMPOSITION_LAYER_DEPTH_INFO_KHR };
 					depthInfo.subImage.swapchain = GetDepthSwapchain();
 					depthInfo.subImage.imageArrayIndex = i;
-					depthInfo.subImage.imageRect.offset = renderInfo.imageRectOffsets[ i ];
+					depthInfo.subImage.imageRect.offset = state.imageRectOffsets[ i ];
 					depthInfo.subImage.imageRect.extent = GetTexutreExtent2Di();
-					depthInfo.minDepth = renderInfo.minDepth;
-					depthInfo.maxDepth = renderInfo.maxDepth;
-					depthInfo.nearZ = renderInfo.nearZ;
-					depthInfo.farZ = renderInfo.farZ;
+					depthInfo.minDepth = state.minDepth;
+					depthInfo.maxDepth = state.maxDepth;
+					depthInfo.nearZ = state.nearZ;
+					depthInfo.farZ = state.farZ;
 
-					renderInfo.projectionLayerViews[ i ].next = &depthInfo;
+					state.projectionLayerViews[ i ].next = &depthInfo;
 				}
 
-				// (2.6) Calculate view projection matrices for each eye
-				CalculateViewMatrices( renderInfo.eyeViewMatrices, &renderInfo.eyeScale );
+				// Calculate view projection matrices for each eye
+				CalculateViewMatrices( state.eyeViewMatrices, &state.eyeScale );
 
-				XrMatrix4x4f_Multiply( &renderInfo.arrEyeVPs[ k_Left ], &renderInfo.eyeProjectionMatrices[ k_Left ], &renderInfo.eyeViewMatrices[ k_Left ] );
-				XrMatrix4x4f_Multiply( &renderInfo.arrEyeVPs[ k_Right ], &renderInfo.eyeProjectionMatrices[ k_Right ], &renderInfo.eyeViewMatrices[ k_Right ] );
+				XrMatrix4x4f_Multiply( &state.eyeVPs[ k_Left ], &state.eyeProjectionMatrices[ k_Left ], &state.eyeViewMatrices[ k_Left ] );
+				XrMatrix4x4f_Multiply( &state.eyeVPs[ k_Right ], &state.eyeProjectionMatrices[ k_Right ], &state.eyeViewMatrices[ k_Right ] );
 
-				// (2.5) Begin draw commands for rendering
-				BeginDraw( renderInfo.unCurrentSwapchainImage_Color, renderInfo.clearValues, true, renderPass );
+				// Begin draw commands for rendering
+				BeginDraw( state.unCurrentSwapchainImage_Color, state.clearValues, true, renderPass );
 
-				// (2.7) Draw vismask (if activated)
+				// Draw vismask (if activated)
 				if ( m_bUseVisMask && stencils.size() == 2 )
 				{
 					for ( size_t eyeIndex = 0; eyeIndex < stencils.size(); ++eyeIndex )
 					{
 						// Push constants for the vertex shader
-						vkCmdPushConstants(
-							GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer,
-							renderInfo.pipelineLayout.layout,
-							VK_SHADER_STAGE_VERTEX_BIT,
-							0,
-							renderInfo.pipelineLayout.size,
-							renderInfo.eyeProjectionMatrices.data() );
+						vkCmdPushConstants( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, pRenderInfo->stencilLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, k_pcrSize, state.eyeProjectionMatrices.data() );
 
 						// Set stencil reference to write to the stencil mask
-						vkCmdSetStencilReference( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1 );
+						vkCmdSetStencilReference( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1 );
 
 						// Bind the vismask pipeline
-						vkCmdBindPipeline( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderInfo.stencilPipelines[ eyeIndex ] );
+						vkCmdBindPipeline( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pRenderInfo->stencilPipelines[ eyeIndex ] );
 
 						// Bind vismask vertices and indices for the current eye
 						VkDeviceSize offsets[] = { 0 };
 
 						// Bind the index buffer for the current eye stencil
-						vkCmdBindIndexBuffer( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, stencils[ eyeIndex ]->GetIndexBuffer()->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT16 );
+						vkCmdBindIndexBuffer( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, stencils[ eyeIndex ]->GetIndexBuffer()->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT16 );
 
 						// Bind the vertex buffer for the current eye stencil
-						vkCmdBindVertexBuffers( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, 0, 1, stencils[ eyeIndex ]->GetVertexBuffer()->GetVkBufferPtr(), offsets );
+						vkCmdBindVertexBuffers( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, 0, 1, stencils[ eyeIndex ]->GetVertexBuffer()->GetVkBufferPtr(), offsets );
 
 						// Draw the stencil for the current eye
 						vkCmdDrawIndexed(
-							GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer,
+							GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer,
 							static_cast< uint32_t >( stencils[ eyeIndex ]->GetIndices()->size() ), // Number of indices to draw
-							1,																		  // Instance count
-							0,																		  // First index
-							0,																		  // Vertex offset
-							0																		  // First instance
+							1,																	   // Instance count
+							0,																	   // First index
+							0,																	   // Vertex offset
+							0																	   // First instance
 						);
 
 						if ( eyeIndex == 0 )
 						{
 							// Transition to the right eye subpass
-							vkCmdNextSubpass( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE );
+							vkCmdNextSubpass( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE );
 						}
 					}
 
 					// Transition to the next subpass for main rendering
-					vkCmdNextSubpass( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE );
+					vkCmdNextSubpass( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_SUBPASS_CONTENTS_INLINE );
 				}
 
-	
-				// (2.4) Copy model matrices to gpu buffer
-				renderInfo.ClearStagingBuffers();
+				// Copy model matrices to gpu buffer
+				state.ClearStagingBuffers();
 				{
-					// (2.4.1) Begin buffer recording to gpu
-					BeginBufferUpdates( renderInfo.unCurrentSwapchainImage_Color );
+					// Begin buffer recording to gpu
+					BeginBufferUpdates( state.unCurrentSwapchainImage_Color );
 
-					// (2.4.2) Update asset buffers
-					XrTime renderTime = renderInfo.frameState.predictedDisplayTime + renderInfo.frameState.predictedDisplayPeriod;
+					// Update asset buffers
+					XrTime renderTime = state.frameState.predictedDisplayTime + state.frameState.predictedDisplayPeriod;
 
-					for ( uint32_t i = 0; i < primitives.size(); i++ )
+					for ( auto &renderable : pRenderInfo->vecRenderables )
 					{
+						if ( !renderable->isVisible )
+							continue;
+
 						// Update matrices (for each instance)
-						for ( uint32_t j = 0; j < primitives[ i ]->instances.size(); j++ )
-							primitives[ i ]->UpdateModelMatrix( j, m_pSession->GetAppSpace(), renderTime );
+						for ( uint32_t i = 0; i < renderable->instances.size(); i++ )
+							renderable->UpdateModelMatrix( i, m_pSession->GetAppSpace(), renderTime );
 
 						// Add to render
-						renderInfo.vecStagingBuffers.push_back( primitives[ i ]->UpdateBuffer( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkTransferCommandBuffer ) );
+						state.vecStagingBuffers.push_back( renderable->UpdateInstancesBuffer( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkTransferCommandBuffer ) );
 					}
 
-					// (2.4.3) Submit to gpu
-					SubmitBufferUpdates( renderInfo.unCurrentSwapchainImage_Color );
+					// Submit to gpu
+					SubmitBufferUpdates( state.unCurrentSwapchainImage_Color );
 				}
 
-				// (2.8) Main rendering subpass: Update push constants
-				vkCmdPushConstants( 
-					GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, 
-					renderInfo.pipelineLayout.layout, 
-					VK_SHADER_STAGE_VERTEX_BIT, 
-					0, 
-					renderInfo.pipelineLayout.size, 
-					renderInfo.arrEyeVPs.data() );
-
-				// (2.9) Main rendering subpass: Draw render assets
-				for ( CColoredPrimitive* coloredPrimitive : primitives )
+				//  Main rendering subpass: Draw render assets
+				for ( auto &renderable : pRenderInfo->vecRenderables )
 				{
-					vkCmdSetStencilReference( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1 );
-
-					// Bind the graphics pipeline for this shape
-					vkCmdBindPipeline(
-						GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer,
-						VK_PIPELINE_BIND_POINT_GRAPHICS,
-						coloredPrimitive->pipeline == VK_NULL_HANDLE ? renderInfo.renderPipeline : coloredPrimitive->pipeline );
-
-					// Bind shape's index and vertex buffers
-					vkCmdBindIndexBuffer( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, coloredPrimitive->GetIndexBuffer()->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT16 );
-
-					vkCmdBindVertexBuffers( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, 0, 1, coloredPrimitive->GetVertexBuffer()->GetVkBufferPtr(), coloredPrimitive->vertexOffsets );   // primitive verts
-
-					vkCmdBindVertexBuffers( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, 1, 1, coloredPrimitive->GetInstanceBuffer()->GetVkBufferPtr(), coloredPrimitive->instanceOffsets );   // primitive instances
-
-					// Draw the shape
-					vkCmdDrawIndexed( GetMultiviewRenderTargets().at( renderInfo.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, 
-						coloredPrimitive->GetIndices().size(), coloredPrimitive->GetInstanceCount(), 0, 0, 0 );
+					if ( renderable->isVisible )
+						renderable->Draw( GetMultiviewRenderTargets().at( state.unCurrentSwapchainImage_Color ).vkRenderCommandBuffer, *pRenderInfo );
 				}
+				
+				// Submit draw calls to gpu - this will also clear the staging buffers (if any)
+				SubmitDraw( state.unCurrentSwapchainImage_Color, state.vecStagingBuffers );
 
-
-
-				// (2.12) Submit draw calls to gpu - this will also clear the staging buffers (if any)
-				SubmitDraw( renderInfo.unCurrentSwapchainImage_Color, renderInfo.vecStagingBuffers );
-
-				// (2.13) Release the swapchian image to let the openxr runtime know we're through with it
+				// Release the swapchian image to let the openxr runtime know we're through with it
 				m_pSession->ReleaseFrameImage( GetColorSwapchain(), GetDepthSwapchain() );
 			}
 
-			// (2.14) Assemble frame layers
+			// Assemble frame layers
 
-			// (2.14.1) Pre application layers
-			if ( !renderInfo.preAppFrameLayers.empty() )
+			// Pre application layers
+			if ( !state.preAppFrameLayers.empty() )
 			{
-				for ( XrCompositionLayerBaseHeader* layer : renderInfo.preAppFrameLayers )
-					renderInfo.frameLayers.push_back( layer );
+				for ( XrCompositionLayerBaseHeader *layer : state.preAppFrameLayers )
+					state.frameLayers.push_back( layer );
 			}
 
-			// (2.14.2) Application layers
-			renderInfo.projectionLayer.next = nullptr;
-			renderInfo.projectionLayer.layerFlags = renderInfo.compositionLayerFlags;
+			// Application layers
+			state.projectionLayer.next = nullptr;
+			state.projectionLayer.layerFlags = state.compositionLayerFlags;
 
-			renderInfo.projectionLayer.space = m_pSession->GetAppSpace();
-			renderInfo.projectionLayer.viewCount = (uint32_t) renderInfo.projectionLayerViews.size();
-			renderInfo.projectionLayer.views = renderInfo.projectionLayerViews.data();
+			state.projectionLayer.space = m_pSession->GetAppSpace();
+			state.projectionLayer.viewCount = (uint32_t) state.projectionLayerViews.size();
+			state.projectionLayer.views = state.projectionLayerViews.data();
 
-			renderInfo.frameLayers.push_back( reinterpret_cast< XrCompositionLayerBaseHeader * >( &renderInfo.projectionLayer ) );
+			state.frameLayers.push_back( reinterpret_cast< XrCompositionLayerBaseHeader * >( &state.projectionLayer ) );
 
-			// (2.14.3) Post application layers
-			if ( !renderInfo.postAppFrameLayers.empty() )
+			// Post application layers
+			if ( !state.postAppFrameLayers.empty() )
 			{
-				for ( XrCompositionLayerBaseHeader *layer : renderInfo.postAppFrameLayers )
-					renderInfo.frameLayers.push_back( layer );
+				for ( XrCompositionLayerBaseHeader *layer : state.postAppFrameLayers )
+					state.frameLayers.push_back( layer );
 			}
 		}
 
-		// (3) End frame
-		m_pSession->EndFrame( &renderInfo.frameState, renderInfo.frameLayers, renderInfo.environmentBlendMode );
-		renderInfo.frameLayers.clear();
+		// End frame
+		m_pSession->EndFrame( &state.frameState, state.frameLayers, state.environmentBlendMode );
+		state.frameLayers.clear();
 
 		#if defined( _WIN32 ) && defined( RENDERDOC_ENABLE )
 			if ( rdoc_api && rdoc_api->GetNumCaptures() < RENDERDOC_FRAME_SAMPLES )
@@ -1593,7 +2026,7 @@ namespace xrlib
 			renderPassBeginInfo.renderArea.offset = { 0, 0 };
 			renderPassBeginInfo.renderArea.extent = GetTextureExtent();
 
-			// (3) Start render pass
+			// Start render pass
 			vkCmdBeginRenderPass( m_vecMultiviewRenderTargets[ unSwpachainImageIndex ].vkRenderCommandBuffer, &renderPassBeginInfo, subpass );
 		}
 	}
@@ -1653,7 +2086,7 @@ namespace xrlib
 		vkQueueSubmit( GetAppSession()->GetVulkan()->GetVkQueue_Transfer(), 1, &submitInfo, m_vecMultiviewRenderTargets[ unSwpachainImageIndex ].vkTransferCommandFence );
 	}
 
-	void CStereoRender::CalculateViewMatrices( std::vector< XrMatrix4x4f > &outViewMatrices, const XrVector3f *eyeScale ) 
+	void CStereoRender::CalculateViewMatrices( std::array< XrMatrix4x4f, 2 > &outViewMatrices, const XrVector3f *eyeScale ) 
 	{
 		std::vector< XrMatrix4x4f > eyeViews;
 		eyeViews.resize( outViewMatrices.size() );
@@ -1662,6 +2095,82 @@ namespace xrlib
 			XrMatrix4x4f_CreateTranslationRotationScale( &eyeViews[ i ], &m_vecEyeViews[ i ].pose.position, &m_vecEyeViews[ i ].pose.orientation, eyeScale );
 			XrMatrix4x4f_InvertRigidBody( &outViewMatrices[ i ], &eyeViews[ i ] );
 		}
+	}
+
+	VkDescriptorPool CStereoRender::CreateDescriptorPool( 
+		const std::vector< VkDescriptorPoolSize > &poolSizes, 
+		uint32_t maxSets, 
+		VkDescriptorPoolCreateFlags flags, 
+		const void *pNext )
+	{
+		// Create descriptor pool create info
+		VkDescriptorPoolCreateInfo poolInfo = {
+			VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			pNext,
+			flags,
+			maxSets,
+			static_cast< uint32_t >( poolSizes.size() ),
+			poolSizes.data() };
+
+		// Create descriptor pool
+		VkDescriptorPool descriptorPool;
+		if ( vkCreateDescriptorPool( GetLogicalDevice(), &poolInfo, nullptr, &descriptorPool ) != VK_SUCCESS )
+		{
+			throw std::runtime_error( "Failed to create descriptor pool!" );
+		}
+
+		return descriptorPool;
+	}
+
+	VkDescriptorSet CStereoRender::UpdateDescriptorSets(
+		VkDescriptorPool descriptorPool,
+		std::vector< VkDescriptorSetLayout > &setLayouts,
+		const std::vector< VkDescriptorBufferInfo > &bufferInfos,
+		const std::vector< VkDescriptorImageInfo > &imageInfos,
+		const std::vector< VkBufferView > &texelBufferViews,
+		const std::vector< VkDescriptorType > &descriptorTypes,
+		const std::vector< uint32_t > &bindings,
+		const void *pNextAllocate,
+		const void *pNextWrite )
+	{
+		// Allocate descriptor set
+		VkDescriptorSetAllocateInfo allocInfo = { 
+			VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, 
+			pNextAllocate, 
+			descriptorPool,
+			static_cast< uint32_t >( setLayouts.size() ), 
+			setLayouts.data() };
+
+		VkDescriptorSet descriptorSet;
+		if ( vkAllocateDescriptorSets( GetLogicalDevice(), &allocInfo, &descriptorSet ) != VK_SUCCESS )
+		{
+			throw std::runtime_error( "Failed to allocate descriptor sets!" );
+		}
+
+		// Prepare write descriptor sets
+		std::vector< VkWriteDescriptorSet > descriptorWrites;
+		descriptorWrites.reserve( descriptorTypes.size() );
+
+		for ( size_t i = 0; i < descriptorTypes.size(); ++i )
+		{
+			VkWriteDescriptorSet writeSet = {
+				VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				pNextWrite,
+				descriptorSet,
+				bindings[ i ],
+				0,
+				1,
+				descriptorTypes[ i ],
+				descriptorTypes[ i ] == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ? &imageInfos[ i ] : nullptr,
+				descriptorTypes[ i ] == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER ? &bufferInfos[ i ] : nullptr,
+				descriptorTypes[ i ] == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER ? &texelBufferViews[ i ] : nullptr };
+			descriptorWrites.push_back( writeSet );
+		}
+
+		// Update descriptor set
+		vkUpdateDescriptorSets( GetLogicalDevice(), static_cast< uint32_t >( descriptorWrites.size() ), descriptorWrites.data(), 0, nullptr );
+
+		return descriptorSet;
 	}
 
 	VkPhysicalDevice CStereoRender::GetPhysicalDevice() 

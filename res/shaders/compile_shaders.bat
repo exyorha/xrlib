@@ -1,5 +1,7 @@
-REM Copyright 2024 Beyond Reality Labs Ltd (https://beyondreality.io)
-REM All rights reserved.
+REM Copyright 2024-25 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
+REM Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+REM SPDX-License-Identifier: Apache-2.0
+
 
 REM Check if the first parameter is provided
 if "%~1"=="" (

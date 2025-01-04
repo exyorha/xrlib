@@ -1,18 +1,26 @@
 /* 
- * Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
- * Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
  * SPDX-License-Identifier: Apache-2.0
+ * 
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
 */
+
 
 #pragma once
 
 #include <vector>
 #include <array>
-#include <filesystem>
-#include <fstream>
 #include <cfloat>
 
+#include <xrvk/renderables.hpp>
 #include <xrvk/primitive.hpp>
+#include <xrvk/mesh.hpp>
+#include <xrvk/gltf.hpp>
 
 namespace xrlib
 {
@@ -55,15 +63,44 @@ namespace xrlib
 		}
 	#endif
 
-	struct SGraphicsPipelineLayout
+	struct SPipelineStateInfo
 	{
-		uint32_t size = 0;	
-		VkPipelineLayout layout = VK_NULL_HANDLE;
+		VkPipelineVertexInputStateCreateInfo vertexInput;
+		VkPipelineViewportStateCreateInfo viewport;
+		VkPipelineColorBlendStateCreateInfo colorBlend;
+		VkPipelineRasterizationStateCreateInfo rasterization;
+		VkPipelineDynamicStateCreateInfo dynamicState;
+		VkPipelineInputAssemblyStateCreateInfo assembly;
+		VkPipelineMultisampleStateCreateInfo multisample;
+		VkPipelineDepthStencilStateCreateInfo depthStencil;
 
-		SGraphicsPipelineLayout( uint32_t unSize )
-			: size( unSize ) {};
+		// Store vectors to maintain lifetime of data referenced by create infos
+		std::vector< VkViewport > viewports;
+		std::vector< VkRect2D > scissors;
+		std::vector< VkPipelineColorBlendAttachmentState > colorBlendAttachments;
+		std::vector< VkDynamicState > dynamicStates;
+	};
 
-		~SGraphicsPipelineLayout() {};
+	struct SPipelineCreationParams
+	{
+		VkRenderPass renderPass;
+		bool useVisMask;
+		VkFormat depthFormat;
+		uint32_t subpassIndex;
+	};
+
+	struct SPipelines
+	{
+		uint16_t primitiveLayout = 0;
+		uint16_t pbrLayout = 0;
+
+		uint32_t primitives = 0;
+		uint32_t pbr = 0;
+		uint32_t sky = 0;
+		uint32_t floor = 0;
+
+		uint32_t pbrFragmentDescriptorLayout = 0;
+		uint32_t pbrFragmentDescriptorPool = 0;
 	};
 
 	struct SShader
@@ -146,200 +183,105 @@ namespace xrlib
 
 	};
 
-	struct SRenderFrameInfo
-	{
-	  public:
-		float nearZ = 0.1f;
-		float farZ = FLT_MAX;
-
-		float minDepth = 0.f;
-		float maxDepth = 1.f;
-
-		uint32_t unCurrentSwapchainImage_Color = 0;
-		uint32_t unCurrentSwapchainImage_Depth = 0;
-
-		SGraphicsPipelineLayout pipelineLayout = SGraphicsPipelineLayout( sizeof( XrMatrix4x4f ) * 2 ); // View-Projection matrix for each eye
-		std::vector<VkPipeline> stencilPipelines;
-		VkPipeline renderPipeline = VK_NULL_HANDLE;
-
-		XrFrameState frameState { XR_TYPE_FRAME_STATE };
-		XrViewState sharedEyeState { XR_TYPE_VIEW_STATE };
-		XrCompositionLayerProjection projectionLayer { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
-		XrCompositionLayerFlags compositionLayerFlags = 0;
-		XrEnvironmentBlendMode environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
-		
-		XrVector3f eyeScale = { 1.0f, 1.0f, 1.0f };
-		XrPosef hmdPose;
-
-		std::array< XrMatrix4x4f, 2 > arrEyeVPs = {};
-
-		std::vector< XrMatrix4x4f > eyeProjectionMatrices = { XrMatrix4x4f(), XrMatrix4x4f() };
-		std::vector< XrMatrix4x4f > eyeViewMatrices = { XrMatrix4x4f(), XrMatrix4x4f() };
-		
-		std::vector< XrOffset2Di > imageRectOffsets = { { 0, 0 }, { 0, 0 } }; 
-		std::vector< VkClearValue > clearValues = 
-		{
-			// Clear color attachment to black with full opacity
-			{ .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } },
-
-			// Clear depth attachment to maximum depth (1.0f) and stencil to 0
-			{ .depthStencil = { 1.0f, 0 } } 
-		};
-
-		std::vector< XrCompositionLayerProjectionView > projectionLayerViews = {
-			XrCompositionLayerProjectionView { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW },
-			XrCompositionLayerProjectionView { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW } };
-
-		std::vector< XrCompositionLayerBaseHeader * > frameLayers;
-		std::vector< XrCompositionLayerBaseHeader * > preAppFrameLayers;
-		std::vector< XrCompositionLayerBaseHeader * > postAppFrameLayers;
-
-		std::vector< CDeviceBuffer * > vecStagingBuffers;
-
-		void ClearStagingBuffers()
-		{
-			 for ( CDeviceBuffer *pStagingBuffer : vecStagingBuffers )
-			 {
-				 if ( pStagingBuffer == nullptr ) delete pStagingBuffer;
-			 }
-
-			 vecStagingBuffers.clear();
-		}
-
-
-		SRenderFrameInfo( float near, float far, float min = 0.f, float max = 1.f ) :
-			nearZ ( near ),
-			farZ ( far ), 
-			minDepth( min ), 
-			maxDepth( max)
-		{
-			 XrPosef_CreateIdentity( &hmdPose );
-		};
-
-		SRenderFrameInfo() 
-		{ 
-			XrPosef_CreateIdentity( &hmdPose );
-		};
-
-		~SRenderFrameInfo() {};
-
-	};
-
-
 	class CStereoRender
 	{
 	  public:
 		CStereoRender( CSession *pSession, VkFormat vkColorFormat, VkFormat vkDepthFormat );
 		~CStereoRender();
 
+#pragma region CONSTS
+
 		const uint32_t k_EyeCount = 2;
 		const uint32_t k_unStereoViewMask = 0b00000011;
 		const uint32_t k_unStereoConcurrentMask = 0b00000011;
 
-		VkClearColorValue vkClearColor = { { 0.05f, 0.05f, 0.05f, 1.0f } };
+#pragma endregion CONSTS
+
+#pragma region TYPES
 
 		struct SMultiviewRenderTarget
 		{
-			VkImage vkColorTexture = VK_NULL_HANDLE;
-			VkDescriptorImageInfo vkColorImageDescriptor { VK_NULL_HANDLE, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+			 VkImage vkMSAAColorTexture = VK_NULL_HANDLE;
+			 VkImageView vkMSAAColorView = VK_NULL_HANDLE;
 
-			VkImage vkDepthTexture = VK_NULL_HANDLE;
-			VkImageView vkDepthImageView = VK_NULL_HANDLE;
+			 VkImage vkColorTexture = VK_NULL_HANDLE;
+			 VkDescriptorImageInfo vkColorImageDescriptor { VK_NULL_HANDLE, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
 
-			VkFramebuffer vkFrameBuffer = VK_NULL_HANDLE;
+			 VkImage vkMSAADepthTexture = VK_NULL_HANDLE;
+			 VkImageView vkMSAADepthView = VK_NULL_HANDLE;
 
-			VkCommandBuffer vkRenderCommandBuffer = VK_NULL_HANDLE;
-			VkFence vkRenderCommandFence = VK_NULL_HANDLE;
+			 VkImage vkDepthTexture = VK_NULL_HANDLE;
+			 VkImageView vkDepthImageView = VK_NULL_HANDLE;
 
-			VkCommandBuffer vkTransferCommandBuffer = VK_NULL_HANDLE;
-			VkFence vkTransferCommandFence = VK_NULL_HANDLE;
+			 VkFramebuffer vkFrameBuffer = VK_NULL_HANDLE;
 
-			void SetImageViewArray( std::array < VkImageView, 2 > &arrImageViews )
-			{
-				arrImageViews[ 0 ] = vkColorImageDescriptor.imageView;
-				arrImageViews[ 1 ] = vkDepthImageView;
-			}
+			 VkCommandBuffer vkRenderCommandBuffer = VK_NULL_HANDLE;
+			 VkFence vkRenderCommandFence = VK_NULL_HANDLE;
+
+			 VkCommandBuffer vkTransferCommandBuffer = VK_NULL_HANDLE;
+			 VkFence vkTransferCommandFence = VK_NULL_HANDLE;
+
+			 void SetImageViewArray( std::array< VkImageView, 4 > &arrImageViews )
+			 {
+				 arrImageViews[ 0 ] = vkMSAAColorView;					// For msaa rendering (color)
+				 arrImageViews[ 1 ] = vkColorImageDescriptor.imageView; // As msaa resolve target, color texture from openxr runtime
+				 arrImageViews[ 2 ] = vkMSAADepthView;					// For msaa rendering (depth)
+				 arrImageViews[ 3 ] = vkDepthImageView;					// As msaa resolve target, depth texture from openxr runtime
+			 }
 		};
 
-		std::vector< VkRenderPass > vecRenderPasses;
+#pragma endregion TYPES
 
 		XrResult Init( uint32_t unTextureFaceCount = 1, uint32_t unTextureMipCount = 1 );
 		XrResult CreateSwapchains( uint32_t unFaceCount = 1, uint32_t unMipCount = 1 );
-		XrResult CreateSwapchainImages( std::vector < XrSwapchainImageVulkan2KHR > &outSwapchainImages, XrSwapchain xrSwapchain );
+		XrResult CreateSwapchainImages( std::vector< XrSwapchainImageVulkan2KHR > &outSwapchainImages, XrSwapchain xrSwapchain );
 
 		XrResult CreateRenderPass( VkRenderPass &outRenderPass, bool bWithStencilSubpass );
 		XrResult InitRendering_Multiview();
 		XrResult CreateRenderPass_Multiview( bool bUseVisMask );
 		XrResult CreateFramebuffers_Multiview( VkRenderPass vkRenderPass );
 
-		XrResult CreateRenderTargets_Multiview( 
-			VkImageViewCreateFlags colorCreateFlags = 0, 
-			VkImageViewCreateFlags depthCreateFlags = 0, 
-			void *pColorNext = nullptr,
-			void *pDepthNext = nullptr,
-			VkAllocationCallbacks *pCallbacks = nullptr );
+		XrResult CreateRenderTargets_Multiview( VkImageViewCreateFlags colorCreateFlags = 0, VkImageViewCreateFlags depthCreateFlags = 0, void *pColorNext = nullptr, void *pDepthNext = nullptr, VkAllocationCallbacks *pCallbacks = nullptr );
 		XrResult CreateRenderTargetSamplers( VkSamplerCreateInfo &samplerCI, VkAllocationCallbacks *pCallbacks = nullptr );
 
+		VkResult CreateDescriptorPool( VkDescriptorPool &outPool, std::vector< VkDescriptorPoolSize > &poolSizes, uint32_t maxSets, VkDescriptorPoolCreateFlags flags = 0, void *pNext = nullptr );
 
-		VkAttachmentDescription GenerateColorAttachmentDescription();
-		VkAttachmentDescription GenerateDepthAttachmentDescription();
+		VkAttachmentDescription2 GenerateColorAttachmentDescription();
+		VkAttachmentDescription2 GenerateDepthAttachmentDescription();
 		VkSubpassDescription GenerateSubpassDescription();
 
 		VkRenderPassMultiviewCreateInfo GenerateMultiviewCI();
 
-		VkRenderPassCreateInfo GenerateRenderPassCI( 
-			std::vector< VkAttachmentDescription > &vecAttachmentDescriptions,
-			std::vector< VkSubpassDescription > &vecSubpassDescriptions, 
-			std::vector < VkSubpassDependency > &vecSubpassDependencies,
+		VkRenderPassCreateInfo2 GenerateRenderPassCI(
+			std::vector< VkAttachmentDescription2 > &vecAttachmentDescriptions,
+			std::vector< VkSubpassDescription2 > &vecSubpassDescriptions,
+			std::vector< VkSubpassDependency2 > &vecSubpassDependencies,
 			const VkRenderPassCreateFlags vkCreateFlags = 0,
 			const void *pNext = nullptr );
 
-		VkFramebufferCreateInfo GenerateMultiviewFrameBufferCI( 
-			std::array< VkImageView, 2 > &arrImageViews,
-			VkRenderPass vkRenderPass, 
-			VkFramebufferCreateFlags vkCreateFlags = 0,
-			const void *pNext = nullptr);
+		VkFramebufferCreateInfo GenerateMultiviewFrameBufferCI( std::array< VkImageView, 4 > &arrImageViews, VkRenderPass vkRenderPass, VkFramebufferCreateFlags vkCreateFlags = 0, const void *pNext = nullptr );
 
 		VkSamplerCreateInfo GenerateImageSamplerCI( VkSamplerCreateFlags flags = 0, void *pNext = nullptr );
 
-		VkPipelineColorBlendAttachmentState GenerateColorBlendAttachment();
+		VkPipelineColorBlendAttachmentState GenerateColorBlendAttachment( bool bEnableAlphaBlending = false );
 
-		VkPipelineLayoutCreateInfo GeneratePipelineLayoutCI(
-			std::vector < VkPushConstantRange > &vecPushConstantRanges,
-			std::vector< VkDescriptorSetLayout > &vecDescriptorSetLayouts,
-			VkPipelineLayoutCreateFlags createFlags = 0,
-			void *pNext = nullptr );
+		VkPipelineLayoutCreateInfo
+			GeneratePipelineLayoutCI( std::vector< VkPushConstantRange > &vecPushConstantRanges, std::vector< VkDescriptorSetLayout > &vecDescriptorSetLayouts, VkPipelineLayoutCreateFlags createFlags = 0, void *pNext = nullptr );
 
-		VkPipelineVertexInputStateCreateInfo GeneratePipelineStateCI_VertexInput( 
-			std::vector < VkVertexInputBindingDescription > &vecVertexBindingDescriptions, 
+		VkPipelineVertexInputStateCreateInfo GeneratePipelineStateCI_VertexInput(
+			std::vector< VkVertexInputBindingDescription > &vecVertexBindingDescriptions,
 			std::vector< VkVertexInputAttributeDescription > &vecVertexAttributeDescriptions,
-			VkPipelineVertexInputStateCreateFlags createFlags = 0, 
+			VkPipelineVertexInputStateCreateFlags createFlags = 0,
 			void *pNext = nullptr );
 
-		VkPipelineInputAssemblyStateCreateInfo GeneratePipelineStateCI_Assembly( 
-			VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-			VkBool32 primitiveRestartEnable = VK_FALSE,
-			VkPipelineInputAssemblyStateCreateFlags createFlags = 0, 
-			void *pNext = nullptr
-		);
+		VkPipelineInputAssemblyStateCreateInfo
+			GeneratePipelineStateCI_Assembly( VkPrimitiveTopology topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VkBool32 primitiveRestartEnable = VK_FALSE, VkPipelineInputAssemblyStateCreateFlags createFlags = 0, void *pNext = nullptr );
 
-		VkPipelineTessellationStateCreateInfo GeneratePipelineStateCI_TesselationCI
-		( 
-			uint32_t patchControlPoints = 0,
-			VkPipelineTessellationStateCreateFlags createFlags = 0,
-			void *pNext = nullptr 															
-		);
+		VkPipelineTessellationStateCreateInfo GeneratePipelineStateCI_TesselationCI( uint32_t patchControlPoints = 0, VkPipelineTessellationStateCreateFlags createFlags = 0, void *pNext = nullptr );
 
-		VkPipelineViewportStateCreateInfo GeneratePipelineStateCI_ViewportCI
-		( 
-			std::vector < VkViewport > &vecViewports,
-			std::vector < VkRect2D > &vecScissors,
-			VkPipelineViewportStateCreateFlags createFlags = 0,
-			void *pNext = nullptr
-		);
+		VkPipelineViewportStateCreateInfo GeneratePipelineStateCI_ViewportCI( std::vector< VkViewport > &vecViewports, std::vector< VkRect2D > &vecScissors, VkPipelineViewportStateCreateFlags createFlags = 0, void *pNext = nullptr );
 
-		VkPipelineRasterizationStateCreateInfo GeneratePipelineStateCI_RasterizationCI
-		( 
+		VkPipelineRasterizationStateCreateInfo GeneratePipelineStateCI_RasterizationCI(
 			VkPolygonMode polygonMode = VK_POLYGON_MODE_FILL,
 			VkCullModeFlags cullMode = VK_CULL_MODE_BACK_BIT,
 			VkFrontFace frontFace = VK_FRONT_FACE_CLOCKWISE,
@@ -351,26 +293,22 @@ namespace xrlib
 			float depthBiasSlopeFactor = 0.f,
 			VkBool32 rasterizerDiscardEnable = VK_FALSE,
 			VkPipelineRasterizationStateCreateFlags createFlags = 0,
-			void *pNext = nullptr
-		);
+			void *pNext = nullptr );
 
-		VkPipelineMultisampleStateCreateInfo GeneratePipelineStateCI_MultisampleCI
-		( 
-			VkSampleCountFlagBits rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-			VkBool32 sampleShadingEnable = VK_FALSE, 
-			float minSampleShading = 0.f,
+		VkPipelineMultisampleStateCreateInfo GeneratePipelineStateCI_MultisampleCI(
+			VkSampleCountFlagBits rasterizationSamples = VK_SAMPLE_COUNT_2_BIT,
+			VkBool32 sampleShadingEnable = VK_TRUE,
+			float minSampleShading = 0.25f,
 			VkSampleMask *pSampleMask = nullptr,
 			VkBool32 alphaToCoverageEnable = VK_FALSE,
 			VkBool32 alphaToOneEnable = VK_FALSE,
 			VkPipelineMultisampleStateCreateFlags createFlags = 0,
-			void *pNext = nullptr
-		);
+			void *pNext = nullptr );
 
-		VkPipelineDepthStencilStateCreateInfo GeneratePipelineStateCI_DepthStencilCI
-		( 
-			VkBool32 depthTestEnable = VK_FALSE, //VK_TRUE,
-			VkBool32 depthWriteEnable = VK_FALSE, //VK_TRUE, 
-			VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+		VkPipelineDepthStencilStateCreateInfo GeneratePipelineStateCI_DepthStencilCI(
+			VkBool32 depthTestEnable = VK_TRUE,
+			VkBool32 depthWriteEnable = VK_TRUE,
+			VkCompareOp depthCompareOp = VK_COMPARE_OP_LESS,
 			VkBool32 depthBoundsTestEnable = VK_FALSE,
 			VkBool32 stencilTestEnable = VK_FALSE,
 			VkStencilOpState front = {},
@@ -378,30 +316,22 @@ namespace xrlib
 			float minDepthBounds = 0.f,
 			float maxDepthBounds = 0.f,
 			VkPipelineDepthStencilStateCreateFlags createFlags = 0,
-			void *pNext = nullptr
-		);
+			void *pNext = nullptr );
 
-		VkPipelineColorBlendStateCreateInfo GeneratePipelineStateCI_ColorBlendCI
-		( 
-			std::vector< VkPipelineColorBlendAttachmentState > &vecColorBlenAttachmentStates, 
+		VkPipelineColorBlendStateCreateInfo GeneratePipelineStateCI_ColorBlendCI(
+			std::vector< VkPipelineColorBlendAttachmentState > &vecColorBlenAttachmentStates,
 			VkBool32 logicOpEnable = VK_FALSE,
 			VkLogicOp logicOp = VK_LOGIC_OP_CLEAR,
 			VkPipelineColorBlendStateCreateFlags createFlags = 0,
-			void *pNext = nullptr 
-		);
+			void *pNext = nullptr );
 
-		VkPipelineDynamicStateCreateInfo GeneratePipelineStateCI_DynamicStateCI
-		( 
-			std::vector< VkDynamicState > &vecDynamicStates,
-			VkPipelineDynamicStateCreateFlags createFlags = 0,
-			void *pNext = nullptr 
-		);
+		VkPipelineDynamicStateCreateInfo GeneratePipelineStateCI_DynamicStateCI( std::vector< VkDynamicState > &vecDynamicStates, VkPipelineDynamicStateCreateFlags createFlags = 0, void *pNext = nullptr );
 
 		VkResult CreateGraphicsPipeline(
+			VkPipelineLayout &outPipelineLayout,
 			VkPipeline &outPipeline,
-			VkPipelineLayout pipelineLayout,
 			VkRenderPass renderPass,
-			std::vector < VkPipelineShaderStageCreateInfo > &vecShaderStages, 
+			std::vector< VkPipelineShaderStageCreateInfo > &vecShaderStages,
 			const VkPipelineVertexInputStateCreateInfo *pVertexInputCI,
 			const VkPipelineInputAssemblyStateCreateInfo *pInputAssemblyCI,
 			const VkPipelineTessellationStateCreateInfo *pTessellationCI,
@@ -418,43 +348,104 @@ namespace xrlib
 			const VkAllocationCallbacks *pCallbacks = nullptr );
 
 		VkResult CreateGraphicsPipeline_Stencil(
-			#ifdef XR_USE_PLATFORM_ANDROID
-						AAssetManager *assetManager,
-			#endif
+#ifdef XR_USE_PLATFORM_ANDROID
+			AAssetManager *assetManager,
+#endif
 			uint32_t unSubpassIndex,
+			VkPipelineLayout &outPipelineLayout,
 			VkPipeline &outPipeline,
-			SGraphicsPipelineLayout &pipelineLayout,
 			VkRenderPass vkRenderPass,
 			std::string sVertexShaderFilename,
 			std::string sFragmentShaderFilename );
 
 		VkResult CreateGraphicsPipeline_Stencils(
-			#ifdef XR_USE_PLATFORM_ANDROID
-						AAssetManager *assetManager,
-			#endif
+#ifdef XR_USE_PLATFORM_ANDROID
+			AAssetManager *assetManager,
+#endif
+			VkPipelineLayout &outPipelineLayout,
 			std::vector< VkPipeline > &outPipelines,
-			SGraphicsPipelineLayout &pipelineLayout,
 			VkRenderPass vkRenderPass,
 			std::vector< std::string > vecVertexShaders,
 			std::vector< std::string > vecFragmentShaders );
 
-		VkResult CreateGraphicsPipeline_Primitives( 
+		VkResult CreateGraphicsPipeline_Primitives(
+		#ifdef XR_USE_PLATFORM_ANDROID
+			AAssetManager *assetManager,
+		#endif
+			VkPipelineLayout &outPipelineLayout,
+			VkPipeline &outPipeline,
+			VkRenderPass vkRenderPass,
+			std::string sVertexShaderFilename,
+			std::string sFragmentShaderFilename );
+
+		VkResult CreateGraphicsPipeline_PBR(
+		#ifdef XR_USE_PLATFORM_ANDROID
+			AAssetManager *assetManager,
+		#endif
+			SPipelines &outPipelines,
+			uint32_t &outPipelineIndex,
+			CRenderInfo* pRenderInfo,
+			uint32_t unPbrDescriptorPoolCount,
+			VkRenderPass vkRenderPass,
+			std::string sVertexShaderFilename,
+			std::string sFragmentShaderFilename,
+			bool bCreateAsMainPBRPipeline );
+
+		VkResult CreateGraphicsPipeline_CustomPBR(
 			#ifdef XR_USE_PLATFORM_ANDROID
 				AAssetManager *assetManager,
 			#endif
-			VkPipeline &outPipeline, 
-			SGraphicsPipelineLayout &pipelineLayout, 
-			VkRenderPass vkRenderPass, 
-			std::string sVertexShaderFilename, 
-			std::string sFragmentShaderFilename
-		);
+			SPipelines &outPipelines,
+			uint32_t &outPipelineIndex,
+			CRenderInfo *pRenderInfo,
+			VkRenderPass vkRenderPass,
+			const std::string &sVertexShaderFilename,
+			const std::string &sFragmentShaderFilename,
+			SPipelineStateInfo &pipelineState,
+			bool bCreateAsMainPBRPipeline,
+			uint32_t unDescriptorPoolCount);
 
-		VkResult AddRenderPass( VkRenderPassCreateInfo *renderPassCI, VkAllocationCallbacks *pAllocator = nullptr );
-		void RenderFrame( 
-			VkRenderPass renderPass, 
-			SRenderFrameInfo &renderInfo, 
-			std::vector< CColoredPrimitive * > &primitives, 
-			std::vector< CPlane2D* > &stencils );
+		VkResult CreateGraphicsPipeline( 
+			VkPipelineLayout &outLayout, 
+			VkPipeline &outPipeline, 
+			VkRenderPass vkRenderPass, 
+			std::vector< VkDescriptorSetLayout > &vecLayouts, 
+			SShaderSet *pShaderSet_WillBeDestroyed );
+
+		SPipelineStateInfo CreateDefaultPipelineState( 
+			std::vector< VkVertexInputBindingDescription > &bindings, 
+			std::vector< VkVertexInputAttributeDescription > &attributes, 
+			uint32_t textureWidth, 
+			uint32_t textureHeight );
+
+		SPipelineStateInfo CreateDefaultPipelineState( 
+			uint32_t textureWidth, 
+			uint32_t textureHeight );
+
+		void ConfigureDepthStencil( 
+			VkPipelineDepthStencilStateCreateInfo &outDepthStencilCI, 
+			bool bUseVisMask, 
+			VkFormat depthFormat );
+
+		VkResult SetupPBRDescriptors( 
+			SPipelines &outPipelines, 
+			CRenderInfo *pRenderInfo, 
+			uint32_t poolCount );
+
+		void SetupPrimitiveVertexAttributes( SShaderSet &shaderSet );
+		void SetupPBRVertexAttributes( SShaderSet &shaderSet );
+
+		VkResult CreateBasePipeline( 
+			VkPipelineLayout &outLayout, 
+			VkPipeline &outPipeline, 
+			SShaderSet *pShaderSet, 
+			const SPipelineCreationParams &params, 
+			std::vector< VkDescriptorSetLayout > &layouts );
+
+		VkResult AddRenderPass( VkRenderPassCreateInfo2 *renderPassCI, VkAllocationCallbacks *pAllocator = nullptr );
+		void RenderFrame( const VkRenderPass renderPass, CRenderInfo* pRenderInfo, std::vector< CPlane2D * > &stencils );
+		bool StartRenderFrame( CRenderInfo *pRenderInfo );
+		void EndRenderFrame( const VkRenderPass renderPass, CRenderInfo *pRenderInfo, std::vector< CPlane2D * > &stencils );
 
 		void BeginDraw(
 			const uint32_t unSwpachainImageIndex,
@@ -463,16 +454,95 @@ namespace xrlib
 			const VkRenderPass renderpass = VK_NULL_HANDLE,
 			const VkSubpassContents subpass = VK_SUBPASS_CONTENTS_INLINE );
 
-		void SubmitDraw( 
-			const uint32_t unSwpachainImageIndex, 
-			std::vector< CDeviceBuffer* >&vecStagingBuffers,
-			const uint32_t timeoutNs = 1000000000, 
+		void SubmitDraw(
+			const uint32_t unSwpachainImageIndex,
+			std::vector< CDeviceBuffer * > &vecStagingBuffers,
+			const uint32_t timeoutNs = 1000000000,
 			const VkCommandBufferResetFlags transferBufferResetFlags = 0,
 			const VkCommandBufferResetFlags renderBufferResetFlags = 0 );
 
 		void BeginBufferUpdates( const uint32_t unSwpachainImageIndex );
 		void SubmitBufferUpdates( const uint32_t unSwpachainImageIndex );
-		void CalculateViewMatrices( std::vector< XrMatrix4x4f > &outViewMatrices, const XrVector3f *eyeScale );
+		void CalculateViewMatrices( std::array< XrMatrix4x4f, 2 > &outViewMatrices, const XrVector3f *eyeScale );
+
+		VkDescriptorPool CreateDescriptorPool( 
+			const std::vector< VkDescriptorPoolSize > &poolSizes, 
+			uint32_t maxSets, 
+			VkDescriptorPoolCreateFlags flags = 0, 
+			const void *pNext = nullptr );
+
+		VkDescriptorSet UpdateDescriptorSets(
+			VkDescriptorPool descriptorPool,
+			std::vector< VkDescriptorSetLayout > &setLayouts,
+			const std::vector< VkDescriptorBufferInfo > &bufferInfos,
+			const std::vector< VkDescriptorImageInfo > &imageInfos,
+			const std::vector< VkBufferView > &texelBufferViews,
+			const std::vector< VkDescriptorType > &descriptorTypes,
+			const std::vector< uint32_t > &bindings,
+			const void *pNextAllocate = nullptr,
+			const void *pNextWrite = nullptr );
+
+		template < typename VertexType > 
+		void FillVertexAttributes( 
+			std::vector< VkVertexInputAttributeDescription > &outVecAttributes, 
+			uint32_t binding, 
+			uint32_t locStart, 
+			std::initializer_list< size_t > excludeOffsets = {} ) 
+		{
+			using Vertex = VertexType;
+
+			if constexpr ( std::is_same_v< Vertex, SMeshVertex > )
+			{
+				const size_t attributeOffsets[] = { 
+					offsetof( Vertex, position ), 
+					offsetof( Vertex, normal ), 
+					offsetof( Vertex, uv0 ), 
+					offsetof( Vertex, color0 ), 
+					offsetof( Vertex, joints ), 
+					offsetof( Vertex, weights ) };
+
+				const VkFormat attributeFormats[] = { 
+					VK_FORMAT_R32G32B32_SFLOAT, 
+					VK_FORMAT_R32G32B32_SFLOAT, 
+					VK_FORMAT_R32G32_SFLOAT, 
+					VK_FORMAT_R32G32B32_SFLOAT, 
+					VK_FORMAT_R32G32B32A32_UINT, 
+					VK_FORMAT_R32G32B32A32_SFLOAT };
+
+				// Generate and skip attribs if offset is in exclude list
+				for ( size_t i = 0; i < std::size( attributeOffsets ); ++i )
+					if ( std::find( excludeOffsets.begin(), excludeOffsets.end(), attributeOffsets[ i ] ) == excludeOffsets.end() )
+						outVecAttributes.push_back( { 
+							locStart++, 
+							binding, 
+							attributeFormats[ i ], 
+							static_cast<uint32_t> ( attributeOffsets[ i ] ) } );
+
+				return;
+			}
+
+			if constexpr ( std::is_same_v< Vertex, XrMatrix4x4f > )
+			{
+				outVecAttributes.push_back( { locStart, binding, VK_FORMAT_R32G32B32A32_SFLOAT, 0 } );
+				outVecAttributes.push_back( { locStart + 1, binding, VK_FORMAT_R32G32B32A32_SFLOAT, 4 * sizeof( float ) } );
+				outVecAttributes.push_back( { locStart + 2, binding, VK_FORMAT_R32G32B32A32_SFLOAT, 8 * sizeof( float ) } );
+				outVecAttributes.push_back( { locStart + 3, binding, VK_FORMAT_R32G32B32A32_SFLOAT, 12 * sizeof( float ) } );
+
+				return;
+			}
+		}
+
+#pragma region GETTERS
+
+		const VkPushConstantRange GetEyeMatricesPushConstant() 
+		{ 
+			return VkPushConstantRange 
+			{ 
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT, 
+				.offset = 0, 
+				.size = k_pcrSize
+			}; 
+		}
 
 		const bool GetUseVisMask() { return m_bUseVisMask; }
 
@@ -482,6 +552,7 @@ namespace xrlib
 		const VkFormat GetColorFormat() { return m_vkColorFormat; }
 		const VkFormat GetDepthFormat() { return m_vkDepthFormat; }
 		const VkCommandPool GetCommandPool() { return m_vkRenderCommandPool; }
+		const VkCommandPool GetTransferPool() { return m_vkTransferCommandPool; }
 
 		VkAttachmentReference *GetColorAttachmentReference() { return &m_vkColorAttachmentReference; }
 		VkAttachmentReference *GetDepthAttachmentReference() { return &m_vkDepthAttachmentReference; }
@@ -514,6 +585,17 @@ namespace xrlib
 		XrExtent2Di GetTexutreExtent2Di() { return { (int32_t) m_unTextureWidth, (int32_t) m_unTextureHeight }; }
 
 		const ELogLevel GetMinLogLevel() { return GetAppInstance()->GetMinLogLevel(); }
+
+		# pragma endregion GETTERS
+
+		
+		# pragma region PUBLIC_VARS
+
+		std::vector< VkRenderPass > vecRenderPasses;
+		VkClearColorValue vkClearColor = { { 0.05f, 0.05f, 0.05f, 1.0f } };
+
+		#pragma endregion PUBLIC_VARS
+
 
 	  private:
 		CSession *m_pSession = nullptr;

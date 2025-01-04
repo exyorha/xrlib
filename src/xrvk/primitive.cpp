@@ -1,31 +1,46 @@
-/*
- * Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
- * Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+/* 
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
  * SPDX-License-Identifier: Apache-2.0
- */
+ * 
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
+*/
+
 
 #include <xrvk/primitive.hpp>
 
 namespace xrlib
 {
 
-	CPlane2D::CPlane2D( CSession *pSession )
-		: m_pSession( pSession )
+	CPlane2D::CPlane2D( 
+		CSession *pSession,
+		CRenderInfo *pRenderInfo,
+		uint16_t pipelineLayoutIdx,
+		uint16_t graphicsPipelineIdx,
+		uint32_t descriptorLayoutIdx,
+		bool bIsVisible,
+		XrVector3f xrScale,
+		XrSpace xrSpace )
+		: CRenderable( pSession, pRenderInfo, pipelineLayoutIdx, graphicsPipelineIdx, descriptorLayoutIdx, bIsVisible, xrScale, xrSpace )
 	{
-		assert( pSession );
-		
-		// Create device memory buffers
-		m_pIndexBuffer = new CDeviceBuffer( pSession );
-		m_pVertexBuffer = new CDeviceBuffer( pSession );
+	}
+
+	CPlane2D::CPlane2D( CSession *pSession, CRenderInfo *pRenderInfo, bool bIsVisible, XrVector3f xrScale, XrSpace xrSpace )
+		: CRenderable( pSession, pRenderInfo, 0, 0, std::numeric_limits< uint32_t >::max(), bIsVisible, xrScale, xrSpace )
+	{
 	}
 
 	CPlane2D::~CPlane2D() 
-	{ 
+	{
 		Reset();
 		DeleteBuffers();
 	}
 
-	VkResult CPlane2D::InitBuffers()
+	VkResult CPlane2D::InitBuffers( bool bReset )
 	{
 		if ( m_pIndexBuffer )
 			delete m_pIndexBuffer;
@@ -43,37 +58,84 @@ namespace xrlib
 		if ( result != VK_SUCCESS )
 			return result;
 
+		// todo assert for debug, matrices must be at least 1
+		if ( m_pInstanceBuffer )
+			delete m_pInstanceBuffer;
+
+		m_pInstanceBuffer = new CDeviceBuffer( m_pSession );
+		result = InitBuffer( m_pInstanceBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, sizeof( XrMatrix4x4f ) * instanceMatrices.size(), instanceMatrices.data() );
+
+		if ( result != VK_SUCCESS )
+			return result;
+
+		// Reset
+		if ( bReset )
+			Reset();
+
 		return VK_SUCCESS;
 	}
 
-	VkResult CPlane2D::InitBuffer( CDeviceBuffer *pBuffer, VkBufferUsageFlags usageFlags, VkDeviceSize unSize, void *pData, VkMemoryPropertyFlags memPropFlags, VkAllocationCallbacks *pCallbacks )
+	void CPlane2D::Draw( const VkCommandBuffer commandBuffer, const CRenderInfo &renderInfo ) 
 	{
-		// @todo debug assert.
-		// assert( pBuffer );
+		// Push constants
+		vkCmdPushConstants( 
+			commandBuffer, 
+			renderInfo.vecPipelineLayouts[ pipelineLayoutIndex ], 
+			VK_SHADER_STAGE_VERTEX_BIT, 
+			0, 
+			k_pcrSize, 
+			renderInfo.state.eyeVPs.data() );
 
-		return pBuffer->Init( usageFlags, memPropFlags, unSize, pData, pCallbacks );
+		// Set stencil reference
+		vkCmdSetStencilReference( commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1 );
+
+		// Bind the graphics pipeline for this shape
+		vkCmdBindPipeline( commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderInfo.vecGraphicsPipelines[ graphicsPipelineIndex ] );
+
+		// Bind shape's index and vertex buffers
+		vkCmdBindIndexBuffer( commandBuffer, GetIndexBuffer()->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT16 );
+		vkCmdBindVertexBuffers( commandBuffer, 0, 1, GetVertexBuffer()->GetVkBufferPtr(), vertexOffsets );
+		vkCmdBindVertexBuffers( commandBuffer, 1, 1, GetInstanceBuffer()->GetVkBufferPtr(), instanceOffsets );
+
+		// Bind the descriptor sets
+		if ( !vertexDescriptors.empty() )
+		{
+			vkCmdBindDescriptorSets(
+				commandBuffer,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				renderInfo.vecPipelineLayouts[ pipelineLayoutIndex ],
+				0,   // should match set = x in shader
+				vertexDescriptors.size(), // descriptorSetCount
+				vertexDescriptors.data(), // descriptor sets
+				0,					   // dynamicOffsetCount
+				nullptr				   // pDynamicOffsets
+			);
+		}
+
+		// Draw instanced
+		vkCmdDrawIndexed( commandBuffer, GetIndices()->size(), GetInstanceCount(), 0, 0, 0 );
 	}
 
-	void CPlane2D::AddTri( XrVector2f v1, XrVector2f v2, XrVector2f v3 )
+	void CPlane2D::AddTri( XrVector2f v1, XrVector2f v2, XrVector2f v3 ) 
 	{
 		AddVertex( v1 );
 		AddVertex( v2 );
-		AddVertex( v3 );
+		AddVertex( v3 ); 
 	}
 
 	void CPlane2D::AddIndex( unsigned short index ) { m_vecIndices.push_back( index ); }
 
 	void CPlane2D::AddVertex( XrVector2f vertex ) { m_vecVertices.push_back( vertex ); }
 
+	void CPlane2D::ResetIndices() { m_vecIndices.clear(); }
+
+	void CPlane2D::ResetVertices() { m_vecVertices.clear(); } 
+
 	void CPlane2D::Reset()
 	{
 		ResetIndices();
 		ResetVertices();
 	}
-
-	void CPlane2D::ResetIndices() { m_vecIndices.clear(); }
-
-	void CPlane2D::ResetVertices() { m_vecVertices.clear(); }
 
 	void CPlane2D::DeleteBuffers()
 	{
@@ -84,31 +146,31 @@ namespace xrlib
 			delete m_pVertexBuffer;
 	}
 
-	CPrimitive::CPrimitive( CSession *pSession, uint32_t drawPriority, XrVector3f scale, EAssetMotionType motionType, VkPipeline graphicsPipeline, XrSpace space ) :
-		m_pSession( pSession ),
-		unDrawPriority( drawPriority ), 
-		pipeline( graphicsPipeline )
+	CPrimitive::CPrimitive(
+		CSession *pSession,
+		CRenderInfo *pRenderInfo,
+		uint16_t pipelineLayoutIdx,
+		uint16_t graphicsPipelineIdx,
+		uint32_t descriptorLayoutIdx,
+		bool bIsVisible,
+		XrVector3f xrScale,
+		XrSpace xrSpace )
+		: CRenderable( pSession, pRenderInfo, pipelineLayoutIdx, graphicsPipelineIdx, descriptorLayoutIdx, bIsVisible, xrScale, xrSpace )
 	{
-		assert( pSession );
+	}
 
-		// Create device memory buffers
-		m_pIndexBuffer = new CDeviceBuffer( pSession );
-		m_pVertexBuffer = new CDeviceBuffer( pSession );
-		m_pInstanceBuffer = new CDeviceBuffer( pSession );
-
-		// Pre-fill first instance
-		instances.push_back( SInstanceState { motionType, space, scale } ); // pre-fill first instance
-		instanceMatrices.push_back( XrMatrix4x4f() );
-		XrMatrix4x4f_CreateTranslationRotationScale( &instanceMatrices[ 0 ], GetPosition( 0 ), GetOrientation( 0 ), GetScale( 0 ) );
+	CPrimitive::CPrimitive( CSession *pSession, CRenderInfo *pRenderInfo, bool bIsVisible, XrVector3f xrScale, XrSpace xrSpace ) : 
+		CRenderable( pSession, pRenderInfo, 0, 0, std::numeric_limits< uint32_t >::max(), bIsVisible, xrScale, xrSpace )
+	{
 	}
 
 	CPrimitive::~CPrimitive() 
-	{ 
+	{
 		Reset();
 		DeleteBuffers();
 	}
 
-	VkResult CPrimitive::InitBuffers() 
+	VkResult CPrimitive::InitBuffers( bool bReset ) 
 	{ 
 		if ( m_pIndexBuffer )
 			delete m_pIndexBuffer;
@@ -131,35 +193,60 @@ namespace xrlib
 			delete m_pInstanceBuffer;
 
 		m_pInstanceBuffer = new CDeviceBuffer( m_pSession );
-		return InitBuffer( m_pInstanceBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof( XrMatrix4x4f ) * instanceMatrices.size(), instanceMatrices.data() );
+		result = InitBuffer( 
+			m_pInstanceBuffer, 
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+			sizeof( XrMatrix4x4f ) * instanceMatrices.size(), instanceMatrices.data() );
+			
+		if ( result != VK_SUCCESS )
+				return result;
+
+		// Reset
+		if ( bReset )
+			Reset();
+
+		return VK_SUCCESS;
 	}
 
-	VkResult CPrimitive::InitBuffer( CDeviceBuffer *pBuffer, VkBufferUsageFlags usageFlags, VkDeviceSize unSize, void *pData, VkMemoryPropertyFlags memPropFlags, VkAllocationCallbacks *pCallbacks )
+	void CPrimitive::Draw( const VkCommandBuffer commandBuffer, const CRenderInfo &renderInfo ) 
 	{
-		// @todo debug assert. 
-		// assert( pBuffer );
+		// Push constants
+		vkCmdPushConstants( 
+			commandBuffer, 
+			renderInfo.vecPipelineLayouts[ pipelineLayoutIndex ], 
+			VK_SHADER_STAGE_VERTEX_BIT, 
+			0, 
+			k_pcrSize, 
+			renderInfo.state.eyeVPs.data() );
 
-		return pBuffer->Init( usageFlags, memPropFlags, unSize, pData, pCallbacks );
-	}
+		// Set stencil reference
+		vkCmdSetStencilReference( commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1 );
 
-	void CPrimitive::ResetScale( float x, float y, float z, uint32_t unInstanceIndex ) 
-	{
-		// @todo - debug assert. ideally no checks here other than debug assert for perf
-		instances[ unInstanceIndex ].scale = { x, y, z }; 
-	}
+		// Bind the graphics pipeline for this shape
+		vkCmdBindPipeline( commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderInfo.vecGraphicsPipelines[ graphicsPipelineIndex ] );
 
-	void CPrimitive::ResetScale( float fScale, uint32_t unInstanceIndex ) 
-	{ 
-		// @todo - debug assert. ideally no checks here other than debug assert for perf
-		instances[ unInstanceIndex ].scale = { fScale, fScale, fScale }; 
-	}
+		// Bind shape's index and vertex buffers
+		vkCmdBindIndexBuffer( commandBuffer, GetIndexBuffer()->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT16 );
+		vkCmdBindVertexBuffers( commandBuffer, 0, 1, GetVertexBuffer()->GetVkBufferPtr(), vertexOffsets ); 
+		vkCmdBindVertexBuffers( commandBuffer, 1, 1, GetInstanceBuffer()->GetVkBufferPtr(), instanceOffsets ); 
 
-	void CPrimitive::Scale( float fPercent, uint32_t unInstanceIndex ) 
-	{ 
-		// @todo - debug assert. ideally no checks here other than debug assert for perf
-		instances[ unInstanceIndex ].scale.x *= fPercent;
-		instances[ unInstanceIndex ].scale.y *= fPercent;
-		instances[ unInstanceIndex ].scale.z *= fPercent;
+		// Bind the descriptor sets
+		if ( !vertexDescriptors.empty() )
+		{
+			vkCmdBindDescriptorSets(
+				commandBuffer,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				renderInfo.vecPipelineLayouts[ pipelineLayoutIndex ],
+				0,   // should match set = x in shader
+				vertexDescriptors.size(), // descriptorSetCount
+				vertexDescriptors.data(), // descriptor sets
+				0,					   // dynamicOffsetCount
+				nullptr				   // pDynamicOffsets
+			);
+		}
+
+		// Draw instanced
+		vkCmdDrawIndexed( commandBuffer, GetIndices().size(), GetInstanceCount(), 0, 0, 0 );
 	}
 
 	void CPrimitive::AddTri( XrVector3f v1, XrVector3f v2, XrVector3f v3 ) 
@@ -211,92 +298,13 @@ namespace xrlib
 	void CPrimitive::ResetIndices() 
 	{ 
 		m_vecIndices.clear(); 
+		m_vecIndices.shrink_to_fit();
 	}
 
 	void CPrimitive::ResetVertices() 
 	{ 
 		m_vecVertices.clear(); 
-	}
-
-	CDeviceBuffer *CPrimitive::UpdateBuffer( VkCommandBuffer transferCmdBuffer ) 
-	{
-		// Calculate buffer size
-		VkDeviceSize bufferSize = instanceMatrices.size() * sizeof( XrMatrix4x4f );
-
-		// Create staging buffer
-		CDeviceBuffer *pStagingBuffer = new CDeviceBuffer( m_pSession );
-		pStagingBuffer->Init(
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-			bufferSize, 
-			instanceMatrices.data() );
-
-		// Copy buffer
-		VkBufferCopy bufferCopyRegion = {};
-		bufferCopyRegion.size = bufferSize;
-		vkCmdCopyBuffer( transferCmdBuffer, pStagingBuffer->GetVkBuffer(), m_pInstanceBuffer->GetVkBuffer(), 1, &bufferCopyRegion );
-
-		return pStagingBuffer;
-	}
-
-	uint32_t CPrimitive::AddInstance( uint32_t unCount, XrVector3f scale ) 
-	{ 
-		for ( size_t i = 0; i < unCount; i++ )
-		{
-			instances.push_back( SInstanceState( scale ) );
-			instanceMatrices.push_back( XrMatrix4x4f() );
-		}
-
-		if ( m_pInstanceBuffer )
-			delete m_pInstanceBuffer;
-
-		m_pInstanceBuffer = new CDeviceBuffer( m_pSession );
-		assert( InitBuffer( m_pInstanceBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof( XrMatrix4x4f ) * instanceMatrices.size(), nullptr ) == VK_SUCCESS);
-
-		return GetInstanceCount();
-	}
-
-	void CPrimitive::UpdateModelMatrix( uint32_t unInstanceIndex, XrSpace baseSpace, XrTime time, bool bForceUpdate )
-	{
-		if ( instances[ unInstanceIndex ].motionType == EAssetMotionType::STATIC_INIT )
-		{
-			bForceUpdate = true;
-			instances[ unInstanceIndex ].motionType = EAssetMotionType::STATIC_NO_INIT;
-		}
-
-		if ( instances[ unInstanceIndex ].motionType == EAssetMotionType::DYNAMIC || bForceUpdate )
-		{
-			if ( instances[ unInstanceIndex ].space != XR_NULL_HANDLE && baseSpace != XR_NULL_HANDLE )
-			{
-				XrSpaceLocation spaceLocation { XR_TYPE_SPACE_LOCATION };
-				if ( XR_UNQUALIFIED_SUCCESS ( xrLocateSpace( instances[ unInstanceIndex ].space, baseSpace, time, &spaceLocation ) ) )
-				{
-					if ( spaceLocation.locationFlags & XR_SPACE_LOCATION_ORIENTATION_VALID_BIT )
-						instances[ unInstanceIndex ].pose.orientation = spaceLocation.pose.orientation;
-
-					if ( spaceLocation.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT )
-						instances[ unInstanceIndex ].pose.position = spaceLocation.pose.position;
-				}
-			}
-			
-			XrMatrix4x4f_CreateTranslationRotationScale( 
-				&instanceMatrices[ unInstanceIndex ], 
-				&instances[ unInstanceIndex ].pose.position,
-				&instances[ unInstanceIndex ].pose.orientation, 
-				&instances[ unInstanceIndex ].scale );
-		}
-	}
-
-	XrMatrix4x4f *CPrimitive::GetModelMatrix( uint32_t unInstanceIndex, bool bRefresh ) 
-	{ 
-		if ( bRefresh )
-			XrMatrix4x4f_CreateTranslationRotationScale( 
-				&instanceMatrices[ unInstanceIndex ], 
-				&instances[ unInstanceIndex ].pose.position, 
-				&instances[ unInstanceIndex ].pose.orientation,
-				&instances[ unInstanceIndex ].scale );
-
-		return &instanceMatrices[ unInstanceIndex ];
+		m_vecVertices.shrink_to_fit();
 	}
 
 	void CPrimitive::DeleteBuffers() 
@@ -312,19 +320,107 @@ namespace xrlib
 	}
 
 	CColoredPrimitive::CColoredPrimitive( 
-		CSession *pSession, 
-		uint32_t drawPriority, 
-		XrVector3f scale,
-		EAssetMotionType motionType,
-		float fAlpha, 
-		VkPipeline graphicsPipeline, 
-		XrSpace space ) 
-		: CPrimitive( pSession, drawPriority, scale, motionType, graphicsPipeline, space )
+		CSession *pSession,
+		CRenderInfo *pRenderInfo,
+		uint16_t pipelineLayoutIdx,
+		uint16_t graphicsPipelineIdx,
+		uint32_t descriptorLayoutIdx,
+		bool bIsVisible,
+		float fAlpha,
+		XrVector3f xrScale,
+		XrSpace xrSpace )
+		: CRenderable( pSession, pRenderInfo, pipelineLayoutIdx, graphicsPipelineIdx, descriptorLayoutIdx, bIsVisible, xrScale, xrSpace )
 	{
-	
 	}
 
-	CColoredPrimitive::~CColoredPrimitive() {}
+	CColoredPrimitive::CColoredPrimitive( CSession *pSession, CRenderInfo *pRenderInfo, bool bIsVisible, XrVector3f xrScale, XrSpace xrSpace, float fAlpha )
+		: CRenderable( pSession, pRenderInfo, 0, 0, std::numeric_limits< uint32_t >::max(), bIsVisible, xrScale, xrSpace ) 
+	{
+	}
+
+	void CColoredPrimitive::Reset() 
+	{
+		ResetIndices();
+		ResetVertices();
+	}
+
+	VkResult CColoredPrimitive::InitBuffers( bool bReset ) 
+	{ 
+		if ( m_pIndexBuffer )
+			delete m_pIndexBuffer;
+
+		m_pIndexBuffer = new CDeviceBuffer( m_pSession );
+		VkResult result = InitBuffer( m_pIndexBuffer, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, sizeof( unsigned short ) * m_vecIndices.size(), m_vecIndices.data() );
+		if ( result != VK_SUCCESS )
+			return result;
+
+		if ( m_pVertexBuffer )
+			delete m_pVertexBuffer;
+
+		m_pVertexBuffer = new CDeviceBuffer( m_pSession );
+		result = InitBuffer( m_pVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof( SColoredVertex ) * m_vecVertices.size(), m_vecVertices.data() );
+		if ( result != VK_SUCCESS )
+			return result;
+
+		// todo assert for debug, matrices must be at least 1
+		if ( m_pInstanceBuffer )
+			delete m_pInstanceBuffer;
+
+		m_pInstanceBuffer = new CDeviceBuffer( m_pSession );
+		result = InitBuffer( 
+			m_pInstanceBuffer, 
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+			sizeof( XrMatrix4x4f ) * instanceMatrices.size(), instanceMatrices.data() );
+			
+		if ( result != VK_SUCCESS )
+				return result;
+		
+		// Reset
+		if ( bReset )
+			Reset();
+
+		return VK_SUCCESS;
+	}
+
+	void CColoredPrimitive::Draw( const VkCommandBuffer commandBuffer, const CRenderInfo &renderInfo ) 
+	{
+		// Push constants
+		vkCmdPushConstants( commandBuffer, renderInfo.vecPipelineLayouts[ pipelineLayoutIndex ], VK_SHADER_STAGE_VERTEX_BIT, 0, k_pcrSize, renderInfo.state.eyeVPs.data() );
+
+		// Set stencil reference
+		vkCmdSetStencilReference( commandBuffer, VK_STENCIL_FACE_FRONT_AND_BACK, 1 );
+
+		// Bind the graphics pipeline for this shape
+		vkCmdBindPipeline( commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderInfo.vecGraphicsPipelines[ graphicsPipelineIndex ] );
+
+		// Bind shape's index and vertex buffers
+		vkCmdBindIndexBuffer( commandBuffer, GetIndexBuffer()->GetVkBuffer(), 0, VK_INDEX_TYPE_UINT16 );
+		vkCmdBindVertexBuffers( commandBuffer, 0, 1, GetVertexBuffer()->GetVkBufferPtr(), vertexOffsets );
+		vkCmdBindVertexBuffers( commandBuffer, 1, 1, GetInstanceBuffer()->GetVkBufferPtr(), instanceOffsets );
+
+		// Bind the descriptor sets
+		if ( !vertexDescriptors.empty() )
+		{
+			vkCmdBindDescriptorSets(
+				commandBuffer,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				renderInfo.vecPipelineLayouts[ pipelineLayoutIndex ],
+				0,   // should match set = x in shader
+				vertexDescriptors.size(), // descriptorSetCount
+				vertexDescriptors.data(), // descriptor sets
+				0,					   // dynamicOffsetCount
+				nullptr				   // pDynamicOffsets
+			);
+		}
+
+		// Draw instanced
+		vkCmdDrawIndexed( commandBuffer, GetIndices().size(), GetInstanceCount(), 0, 0, 0 );
+	}
+
+	void CColoredPrimitive::AddIndex( unsigned short index ) 
+	{ 
+		m_vecIndices.push_back( index ); 
+	}
 
 	void CColoredPrimitive::AddVertex( XrVector3f vertex ) 
 	{ 
@@ -386,23 +482,48 @@ namespace xrlib
 			vertex.color = { color.x, color.y, color.z, fAlpha };
 	}
 
-	VkResult CColoredPrimitive::InitBuffers() 
-	{ 
-		VkResult result = InitBuffer( m_pIndexBuffer, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, sizeof( unsigned short ) * m_vecIndices.size(), m_vecIndices.data() );
-		if ( result != VK_SUCCESS )
-			return result;
-
-		result = InitBuffer( m_pVertexBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof( SColoredVertex ) * m_vecVertices.size(), m_vecVertices.data() );
-		if ( result != VK_SUCCESS )
-			return result;
-
-		// todo assert for debug, matrices must be at least 1
-		return InitBuffer( m_pInstanceBuffer, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, sizeof( XrMatrix4x4f ) * instanceMatrices.size(), instanceMatrices.data() );
+	void CColoredPrimitive::ResetIndices() 
+	{
+		m_vecIndices.clear();
+		m_vecIndices.shrink_to_fit();
 	}
 
-	CPyramid::CPyramid( CSession *pSession, uint32_t drawPriority, XrVector3f scale, EAssetMotionType EAssetMotionType, VkPipeline graphicsPipeline, XrSpace space )
-		: CPrimitive( pSession, drawPriority, scale, EAssetMotionType, graphicsPipeline, space )
+	void CColoredPrimitive::ResetVertices() 
+	{
+		m_vecVertices.clear();
+		m_vecVertices.shrink_to_fit();
+	}
 
+	void CColoredPrimitive::DeleteBuffers() 
+	{
+		if ( m_pIndexBuffer )
+			delete m_pIndexBuffer;
+
+		if ( m_pVertexBuffer )
+			delete m_pVertexBuffer;
+	}
+
+	CPyramid::CPyramid(
+		CSession *pSession,
+		CRenderInfo *pRenderInfo,
+		uint16_t pipelineLayoutIdx,
+		uint16_t graphicsPipelineIdx,
+		uint32_t descriptorLayoutIdx,
+		bool bIsVisible,
+		XrVector3f xrScale,
+		XrSpace xrSpace )
+		: CPrimitive( pSession, pRenderInfo, pipelineLayoutIdx, graphicsPipelineIdx, descriptorLayoutIdx, bIsVisible, xrScale, xrSpace )
+	{
+		InitShape();
+	}
+
+	CPyramid::CPyramid( CSession *pSession, CRenderInfo *pRenderInfo, bool bIsVisible, XrVector3f xrScale, XrSpace xrSpace ) : 
+		CPrimitive( pSession, pRenderInfo, 0, 0, std::numeric_limits< uint32_t >::max(), bIsVisible, xrScale, xrSpace )
+	{
+		InitShape();
+	}
+
+	void CPyramid::InitShape() 
 	{
 		const XrVector3f VertPyramid_Tip { 0.f, 0.f, -0.5f };
 		const XrVector3f VertPyramid_Top { 0.f, 0.5f, 0.5f };
@@ -410,10 +531,10 @@ namespace xrlib
 		const XrVector3f VertPyramid_Base_Right { 0.5f, -0.5f, 0.5f };
 
 		// Add Vertices
-		AddTri( VertPyramid_Base_Left, VertPyramid_Top, VertPyramid_Tip );			// left (port)
-		AddTri( VertPyramid_Base_Right, VertPyramid_Top, VertPyramid_Base_Left );	// back
-		AddTri( VertPyramid_Tip, VertPyramid_Top, VertPyramid_Base_Right );			// right (starboard)
-		AddTri( VertPyramid_Base_Left, VertPyramid_Tip, VertPyramid_Base_Right );	// base - this is wound clockwise so the face will end up facing downwards
+		AddTri( VertPyramid_Base_Left, VertPyramid_Top, VertPyramid_Tip );		  // left (port)
+		AddTri( VertPyramid_Base_Right, VertPyramid_Top, VertPyramid_Base_Left ); // back
+		AddTri( VertPyramid_Tip, VertPyramid_Top, VertPyramid_Base_Right );		  // right (starboard)
+		AddTri( VertPyramid_Base_Left, VertPyramid_Tip, VertPyramid_Base_Right ); // base - this is wound clockwise so the face will end up facing downwards
 
 		// Add indices
 		// @todo
@@ -421,10 +542,27 @@ namespace xrlib
 			m_vecIndices.push_back( i );
 	}
 
-	CPyramid::~CPyramid() {}
+	CColoredPyramid::CColoredPyramid(
+		CSession *pSession,
+		CRenderInfo *pRenderInfo,
+		uint16_t pipelineLayoutIdx,
+		uint16_t graphicsPipelineIdx,
+		uint32_t descriptorLayoutIdx,
+		bool bIsVisible,
+		float fAlpha,
+		XrVector3f xrScale,
+		XrSpace xrSpace )
+		: CColoredPrimitive( pSession, pRenderInfo, pipelineLayoutIdx, graphicsPipelineIdx, descriptorLayoutIdx, bIsVisible, fAlpha, xrScale, xrSpace )
+	{
+		InitShape( fAlpha );
+	}
 
-	CColoredPyramid::CColoredPyramid( CSession *pSession, uint32_t drawPriority, XrVector3f scale, EAssetMotionType motionType, float fAlpha, VkPipeline graphicsPipeline, XrSpace space )
-		: CColoredPrimitive( pSession, drawPriority, scale, motionType, fAlpha, graphicsPipeline, space )
+	CColoredPyramid::CColoredPyramid( CSession *pSession, CRenderInfo *pRenderInfo, bool bIsVisible, XrVector3f xrScale, XrSpace xrSpace, float fAlpha ) : CColoredPrimitive( pSession, pRenderInfo, bIsVisible, xrScale, xrSpace, fAlpha )
+	{
+		InitShape( fAlpha );
+	}
+
+	void CColoredPyramid::InitShape( float fAlpha ) 
 	{
 		const XrVector3f VertPyramid_Tip { 0.f, 0.f, -0.5f };
 		const XrVector3f VertPyramid_Top { 0.f, 0.5f, 0.5f };
@@ -432,10 +570,10 @@ namespace xrlib
 		const XrVector3f VertPyramid_Base_Right { 0.5f, -0.5f, 0.5f };
 
 		// Add Vertices
-		AddColoredTri( VertPyramid_Top, VertPyramid_Base_Left, VertPyramid_Tip, k_ColorRed, fAlpha );				// left (port)
-		AddColoredTri( VertPyramid_Top, VertPyramid_Base_Right, VertPyramid_Base_Left, k_ColorPurple, fAlpha );		// back
-		AddColoredTri( VertPyramid_Top, VertPyramid_Tip, VertPyramid_Base_Right, k_ColorGreen, fAlpha );			// right (starboard)
-		AddColoredTri( VertPyramid_Tip, VertPyramid_Base_Left, VertPyramid_Base_Right, k_ColorBlue, fAlpha );		// base - this is wound clockwise so the face will end up facing downwards
+		AddColoredTri( VertPyramid_Top, VertPyramid_Base_Left, VertPyramid_Tip, k_ColorRed, fAlpha );			// left (port)
+		AddColoredTri( VertPyramid_Top, VertPyramid_Base_Right, VertPyramid_Base_Left, k_ColorPurple, fAlpha ); // back
+		AddColoredTri( VertPyramid_Top, VertPyramid_Tip, VertPyramid_Base_Right, k_ColorGreen, fAlpha );		// right (starboard)
+		AddColoredTri( VertPyramid_Tip, VertPyramid_Base_Left, VertPyramid_Base_Right, k_ColorGold, fAlpha );	// base - this is wound clockwise so the face will end up facing downwards
 
 		// Add indices
 		// @todo
@@ -443,10 +581,28 @@ namespace xrlib
 			m_vecIndices.push_back( i );
 	}
 
-	CColoredPyramid::~CColoredPyramid() {}
+	CColoredCube::CColoredCube(
+		CSession *pSession,
+		CRenderInfo *pRenderInfo,
+		uint16_t pipelineLayoutIdx,
+		uint16_t graphicsPipelineIdx,
+		uint32_t descriptorLayoutIdx,
+		bool bIsVisible,
+		float fAlpha,
+		XrVector3f xrScale,
+		XrSpace xrSpace )
+		: CColoredPrimitive( pSession, pRenderInfo, pipelineLayoutIdx, graphicsPipelineIdx, descriptorLayoutIdx, bIsVisible, fAlpha, xrScale, xrSpace )
+	{
+		InitShape( fAlpha );
+	}
 
-	CColoredCube::CColoredCube( CSession *pSession, uint32_t drawPriority, XrVector3f scale, EAssetMotionType motionType, float fAlpha, VkPipeline graphicsPipeline, XrSpace space ) 
-		: CColoredPrimitive( pSession, drawPriority, scale, motionType, fAlpha, graphicsPipeline, space )
+	CColoredCube::CColoredCube( CSession *pSession, CRenderInfo *pRenderInfo, bool bIsVisible, XrVector3f xrScale, XrSpace xrSpace, float fAlpha )
+		: CColoredPrimitive( pSession, pRenderInfo, bIsVisible, xrScale, xrSpace, fAlpha )
+	{
+		InitShape( fAlpha );
+	}
+
+	void CColoredCube::InitShape( float fAlpha ) 
 	{
 		// Vertices for a 1x1x1 meter cube. (Left/Right, Top/Bottom, Front/Back)
 		const XrVector3f LBB { -0.5f, -0.5f, -0.5f };
@@ -457,24 +613,24 @@ namespace xrlib
 		const XrVector3f RBF { 0.5f, -0.5f, 0.5f };
 		const XrVector3f RTB { 0.5f, 0.5f, -0.5f };
 		const XrVector3f RTF { 0.5f, 0.5f, 0.5f };
-		
+
 		AddColoredTri( LBB, LTB, LBF, k_ColorRed, fAlpha ); // left (port)
-		AddColoredTri( LBF, LTB, LTF, k_ColorRed, fAlpha ); 
+		AddColoredTri( LBF, LTB, LTF, k_ColorRed, fAlpha );
 
-		AddColoredTri( RBF, RTB, RBB, k_ColorRed, fAlpha );		// right (starboard)
-		AddColoredTri( RTF, RTB, RBF, k_ColorRed, fAlpha );	
+		AddColoredTri( RBF, RTB, RBB, k_ColorRed, fAlpha ); // right (starboard)
+		AddColoredTri( RTF, RTB, RBF, k_ColorRed, fAlpha );
 
-		AddColoredTri( RBF, LBB, LBF, k_ColorBlue, fAlpha );	// bottom
-		AddColoredTri( RBB, LBB, RBF, k_ColorBlue, fAlpha ); 
+		AddColoredTri( RBF, LBB, LBF, k_ColorGold, fAlpha ); // bottom
+		AddColoredTri( RBB, LBB, RBF, k_ColorGold, fAlpha );
 
-		AddColoredTri( RTF, LTB, RTB, k_ColorTeal, fAlpha );	// top
-		AddColoredTri( LTF, LTB, RTF, k_ColorTeal, fAlpha ); 
+		AddColoredTri( RTF, LTB, RTB, k_ColorTeal, fAlpha ); // top
+		AddColoredTri( LTF, LTB, RTF, k_ColorTeal, fAlpha );
 
-		AddColoredTri( RTB, LBB, RBB, k_ColorPurple, fAlpha );	// back 
+		AddColoredTri( RTB, LBB, RBB, k_ColorPurple, fAlpha ); // back
 		AddColoredTri( LTB, LBB, RTB, k_ColorPurple, fAlpha );
 
-		AddColoredTri( RTF, LBF, LTF, k_ColorGold, fAlpha );	// front
-		AddColoredTri( RBF, LBF, RTF, k_ColorGold, fAlpha );
+		AddColoredTri( RTF, LBF, LTF, k_ColorBlue, fAlpha ); // front
+		AddColoredTri( RBF, LBF, RTF, k_ColorBlue, fAlpha );
 
 		// Add indices
 		// @todo
@@ -482,6 +638,60 @@ namespace xrlib
 			m_vecIndices.push_back( i );
 	}
 
-	CColoredCube::~CColoredCube() {}
+	CInvertedCube::CInvertedCube(
+		CSession *pSession,
+		CRenderInfo *pRenderInfo,
+		uint16_t pipelineLayoutIdx,
+		uint16_t graphicsPipelineIdx,
+		uint32_t descriptorLayoutIdx,
+		bool bIsVisible,
+		float fAlpha,
+		XrVector3f xrScale,
+		XrSpace xrSpace )
+		: CColoredPrimitive( pSession, pRenderInfo, pipelineLayoutIdx, graphicsPipelineIdx, descriptorLayoutIdx, bIsVisible, fAlpha, xrScale, xrSpace )
+	{
+		InitShape( fAlpha );
+	}
+
+	CInvertedCube::CInvertedCube( CSession *pSession, CRenderInfo *pRenderInfo, bool bIsVisible, XrVector3f xrScale, XrSpace xrSpace, float fAlpha ) : CColoredPrimitive( pSession, pRenderInfo, bIsVisible, xrScale, xrSpace, fAlpha )
+	{
+		InitShape( fAlpha );
+	}
+
+	void CInvertedCube::InitShape( float fAlpha ) 
+	{
+		// Vertices for a 1x1x1 meter cube. (Left/Right, Top/Bottom, Front/Back)
+		const XrVector3f LBB { -0.5f, -0.5f, -0.5f };
+		const XrVector3f LBF { -0.5f, -0.5f, 0.5f };
+		const XrVector3f LTB { -0.5f, 0.5f, -0.5f };
+		const XrVector3f LTF { -0.5f, 0.5f, 0.5f };
+		const XrVector3f RBB { 0.5f, -0.5f, -0.5f };
+		const XrVector3f RBF { 0.5f, -0.5f, 0.5f };
+		const XrVector3f RTB { 0.5f, 0.5f, -0.5f };
+		const XrVector3f RTF { 0.5f, 0.5f, 0.5f };
+
+		AddColoredTri( LTB, LBB, LBF, k_ColorRed, fAlpha ); // left (port)
+		AddColoredTri( LBF, LTF, LTB, k_ColorRed, fAlpha );
+
+		AddColoredTri( RTB, RBF, RBB, k_ColorGreen, fAlpha ); // right (starboard)
+		AddColoredTri( RTB, RTF, RBF, k_ColorGreen, fAlpha );
+
+		AddColoredTri( LBB, RBF, LBF, k_ColorGold, fAlpha ); // bottom
+		AddColoredTri( LBB, RBB, RBF, k_ColorGold, fAlpha );
+
+		AddColoredTri( LTB, RTF, RTB, k_ColorTeal, fAlpha ); // top
+		AddColoredTri( LTB, LTF, RTF, k_ColorTeal, fAlpha );
+
+		AddColoredTri( LBB, RTB, RBB, k_ColorPurple, fAlpha ); // back
+		AddColoredTri( LBB, LTB, RTB, k_ColorPurple, fAlpha );
+
+		AddColoredTri( LBF, RTF, LTF, k_ColorBlue, fAlpha ); // front
+		AddColoredTri( LBF, RBF, RTF, k_ColorBlue, fAlpha );
+
+		// Add indices
+		// @todo
+		for ( uint32_t i = 0; i < 36; i++ )
+			m_vecIndices.push_back( i );
+	}
 
 } // namespace xrlib
