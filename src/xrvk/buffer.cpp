@@ -1,8 +1,15 @@
-/*
- * Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
- * Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+/* 
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
  * SPDX-License-Identifier: Apache-2.0
- */
+ * 
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
+*/
+
 
 #include <xrvk/buffer.hpp>
 
@@ -31,6 +38,7 @@ namespace xrlib
 		VkMemoryPropertyFlags memPropFlags, 
 		VkDeviceSize unSize, 
 		void *pData, 
+		bool bUnmap,
 		VkAllocationCallbacks *pCallbacks ) 
 	{ 
 		assert( usageFlags != 0 );
@@ -87,7 +95,8 @@ namespace xrlib
 					return result;
 			}
 			
-			UnmapMemory();
+			if ( bUnmap )
+				UnmapMemory();
 		}
 
 		// Bind buffer to device memory
@@ -113,6 +122,11 @@ namespace xrlib
 		mappedRange.offset = unOffset;
 		mappedRange.size = unSize;
 		return vkFlushMappedMemoryRanges( GetLogicalDevice(), unRangeCount, &mappedRange );
+	}
+
+	VkResult CDeviceBuffer::MapMemory() 
+	{ 
+		return vkMapMemory( GetLogicalDevice(), m_vkDeviceMemory, 0, m_vkMemorySize, 0, &m_pData ); 
 	}
 
 	void CDeviceBuffer::UnmapMemory() 

@@ -1,8 +1,14 @@
-/*
- * Copyright 2024 Rune Berg (http://runeberg.io | https://github.com/1runeberg)
- * Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+/* 
+ * Copyright 2024,2025 Copyright Rune Berg 
+ * https://github.com/1runeberg | http://runeberg.io | https://runeberg.social | https://www.youtube.com/@1RuneBerg
+ * Licensed under Apache 2.0: https://www.apache.org/licenses/LICENSE-2.0
  * SPDX-License-Identifier: Apache-2.0
- */
+ * 
+ * This work is the next iteration of OpenXRProvider (v1, v2)
+ * OpenXRProvider (v1): Released 2021 -  https://github.com/1runeberg/OpenXRProvider
+ * OpenXRProvider (v2): Released 2022 - https://github.com/1runeberg/OpenXRProvider_v2/
+ * v1 & v2 licensed under MIT: https://opensource.org/license/mit
+*/
 
 #pragma once
 
@@ -60,12 +66,12 @@ namespace xrlib
 
 		XrResult UpdateEyeStates( 
 			std::vector< XrView > &outEyeViews,
-			std::vector< XrMatrix4x4f > &outEyeProjections,
+			std::array< XrMatrix4x4f, 2 > &outEyeProjections,
 			XrViewState *outEyeViewsState,
 			XrFrameState *pFrameState, 		
 			XrSpace space, 
 			const float fNearZ = 0.1f,
-			const float fFarZ = 100.f,
+			const float fFarZ = 10000.f,
 			XrViewConfigurationType viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 
 			void *pNext = nullptr );
 
