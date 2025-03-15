@@ -79,7 +79,7 @@ namespace xrlib
 			XrVector3f xrScale = { 1.f, 1.f, 1.f }, 
 			XrSpace xrSpace = XR_NULL_HANDLE );
 		
-		~CRenderable();
+		virtual ~CRenderable();
 
 		// Interfaces
 		virtual void Reset() = 0;
@@ -117,7 +117,7 @@ namespace xrlib
 		XrVector3f *GetScale( uint32_t unInstanceindex ) { return &instances[ unInstanceindex ].scale; }
 		XrPosef *GetPose( uint32_t unInstanceindex ) { return &instances[ unInstanceindex ].pose; }
 
-		uint32_t GetInstanceCount() { return (uint32_t) instances.size(); }
+		[[nodiscard]] uint32_t GetInstanceCount() const { return (uint32_t) instances.size(); }
 		CDeviceBuffer *GetIndexBuffer() { return m_pIndexBuffer; }
 		CDeviceBuffer *GetVertexBuffer() { return m_pVertexBuffer; }
 		CDeviceBuffer *GetInstanceBuffer() { return m_pInstanceBuffer; }
@@ -139,7 +139,7 @@ namespace xrlib
 	{
 	  public:
 
-		CRenderInfo( CSession* pSession );
+		explicit CRenderInfo( CSession* pSession );
 		~CRenderInfo();
 
 		// For renderables
@@ -241,7 +241,7 @@ namespace xrlib
 				clearValues[ 3 ].depthStencil = { 1.0f, 0u };		 // Depth/stencil resolve
 			};
 
-			~SFrameState() {};
+			~SFrameState() = default;
 		}state;
 
 	  private:
