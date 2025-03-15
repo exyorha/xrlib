@@ -40,18 +40,53 @@ namespace xrlib::FB
 		XrPassthroughLayerFB &layer,
 		std::vector< XrVector3f > &vecVertices,
 		std::vector< uint32_t > &vecIndices,
-		XrSpace xrSpace,
-		XrPosef xrPose,
-		XrVector3f xrScale )
+		XrTriangleMeshFlagsFB flags,
+		void *pOtherInfo )
 	{
 		XrTriangleMeshCreateInfoFB xrMeshCI = { XR_TYPE_TRIANGLE_MESH_CREATE_INFO_FB };
-		xrMeshCI.vertexBuffer = vecVertices.data();
-		xrMeshCI.triangleCount = vecVertices.size();
-		xrMeshCI.vertexCount = xrMeshCI.triangleCount * 3;
-		xrMeshCI.indexBuffer = vecIndices.data();
+		xrMeshCI.flags = flags;	
+		xrMeshCI.next = pOtherInfo;
+        xrMeshCI.triangleCount = vecVertices.size();
+        xrMeshCI.vertexCount = xrMeshCI.triangleCount * 3;
 
+		// Set mesh buffer data
+		if ( flags & XR_TRIANGLE_MESH_MUTABLE_BIT_FB )
+		{
+			xrMeshCI.vertexBuffer = nullptr;
+			xrMeshCI.indexBuffer = nullptr;
+		}
+		else
+		{
+			xrMeshCI.vertexBuffer = vecVertices.data();
+			xrMeshCI.triangleCount = vecVertices.size();
+		}
+
+		// Create triangle mesh
 		XrTriangleMeshFB xrTriangleMeshFB = XR_NULL_HANDLE;
-		XR_RETURN_ON_ERROR( xrCreateTriangleMeshFB( xrSession, &xrMeshCI, &xrTriangleMeshFB ) );
+        XR_RETURN_ON_ERROR(  xrCreateTriangleMeshFB( xrSession, &xrMeshCI, &xrTriangleMeshFB ) );
+
+		// If mutable mesh, initialize topology
+		if ( flags & XR_TRIANGLE_MESH_MUTABLE_BIT_FB )
+		{
+			// Begin mesh update
+			XR_RETURN_ON_ERROR( xrTriangleMeshBeginUpdateFB( xrTriangleMeshFB ) );
+			
+			// Update vertex buffer
+			XrVector3f *vertexBuffer = nullptr;
+			XR_RETURN_ON_ERROR( xrTriangleMeshGetVertexBufferFB( xrTriangleMeshFB, &vertexBuffer ) );
+			if ( vertexBuffer )
+				std::memcpy( vertexBuffer, vecVertices.data(), vecVertices.size() * sizeof( XrVector3f ) );
+
+			// Update index buffer
+			uint32_t *indexBuffer = nullptr;
+			XR_RETURN_ON_ERROR( xrTriangleMeshGetIndexBufferFB( xrTriangleMeshFB, &indexBuffer ) );
+			if ( indexBuffer )
+				std::memcpy( indexBuffer, vecIndices.data(), vecIndices.size() * sizeof( uint32_t ) );
+
+			// End mesh update
+			XR_RETURN_ON_ERROR( xrTriangleMeshEndUpdateFB( xrTriangleMeshFB, xrMeshCI.vertexCount, xrMeshCI.triangleCount ) );
+		}
+
 
 		GetMeshes()->push_back( xrTriangleMeshFB );
 		return XR_SUCCESS;

@@ -30,9 +30,8 @@ namespace xrlib::FB
 			XrPassthroughLayerFB &layer,
 			std::vector< XrVector3f > &vecVertices,
 			std::vector< uint32_t > &vecIndices,
-			XrSpace xrSpace,
-			XrPosef xrPose = { { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } },
-			XrVector3f xrScale = { 1.f, 1.f, 1.f } );
+			XrTriangleMeshFlagsFB flags = 0,
+			void * pOtherInfo = nullptr );
 
 		XrResult RemoveGeometry( uint32_t unIndex );
 
