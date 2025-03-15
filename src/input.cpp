@@ -480,29 +480,35 @@ namespace xrlib
 		return xrResult;
 	}
 
-	const char *CInput::GetCurrentInteractionProfile( const char *sUserPath )
-	{
-		XrPath xrPath;
-		XrResult xrResult = StringToXrPath( sUserPath, &xrPath );
 
-		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
-			return "";
+    const std::string &CInput::GetCurrentInteractionProfile( const char *sUserPath )
+    {
+        static std::string sInteractionProfile;
+        sInteractionProfile.clear();
 
-		XrInteractionProfileState xrInteractionProfileState { XR_TYPE_INTERACTION_PROFILE_STATE };
-		xrResult = xrGetCurrentInteractionProfile( m_pSession->GetXrSession(), xrPath, &xrInteractionProfileState );
+        XrPath xrPath;
+        XrResult xrResult = StringToXrPath( sUserPath, &xrPath );
 
-		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
-			return "";
+        if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
+            return sInteractionProfile;
 
-		std::string sInteractionProfile;
-		xrResult = XrPathToString( sInteractionProfile, &xrInteractionProfileState.interactionProfile );
+        XrInteractionProfileState xrInteractionProfileState{ XR_TYPE_INTERACTION_PROFILE_STATE };
+        xrResult = xrGetCurrentInteractionProfile( m_pSession->GetXrSession(), xrPath,
+                                                  &xrInteractionProfileState );
 
-		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
-			return "";
+        if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
+            return sInteractionProfile;
 
-		LogInfo( XRLIB_NAME, "Current interaction profile (%s) : %s", sUserPath, sInteractionProfile.c_str() );
-		return sInteractionProfile.c_str();
-	}
+        xrResult = XrPathToString( sInteractionProfile,
+                                  &xrInteractionProfileState.interactionProfile );
+
+        if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
+            return sInteractionProfile;
+
+        LogInfo( XRLIB_NAME, "Current interaction profile (%s) : %s", sUserPath,
+                sInteractionProfile.c_str() );
+        return sInteractionProfile;
+    }
 
 	XrResult CInput::GenerateHaptic( XrAction xrAction, XrPath subPath /*= XR_NULL_HANDLE */, uint64_t nDuration /*= XR_MIN_HAPTIC_DURATION*/, float fAmplitude /*= 0.5f*/, float fFrequency /*= XR_FREQUENCY_UNSPECIFIED */ )
 	{
