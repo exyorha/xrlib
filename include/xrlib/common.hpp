@@ -17,6 +17,7 @@
 #define XR_LEFT 0
 #define XR_RIGHT 1
 
+#include <cstring>
 #include <cassert>
 #include <cmath>
 #include <future>

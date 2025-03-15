@@ -38,6 +38,7 @@ namespace xrlib::FB
 
 		// CPassthrough base functions
 		XrResult Init( XrSession session, CInstance *pInstance, void *pOtherInfo = nullptr ) override;
+		XrResult Init( XrSession session, CInstance *pInstance, XrPassthroughFlagsFB flags, void *pOtherInfo = nullptr );
 
 		bool BSystemSupportsPassthrough();
 		bool BSystemSupportsColorPassthrough();
@@ -83,13 +84,14 @@ namespace xrlib::FB
 			XrPassthroughLayerFB &layer,
 			std::vector< XrVector3f > &vecVertices,
 			std::vector< uint32_t > &vecIndices,
-			XrSpace xrSpace,
+			XrSpace baseSpace,
+			XrTriangleMeshFlagsFB triFlags = 0,
 			XrPosef xrPose = { { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } },
 			XrVector3f xrScale = { 1.f, 1.f, 1.f } );
 
 		XrResult UpdateGeometry(
 			XrGeometryInstanceFB xrGeomInstance,
-			XrSpace xrSpace,
+			XrSpace baseSpace,
 			XrTime xrTime,
 			XrPosef xrPose = { { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } },
 			XrVector3f xrScale = { 1.f, 1.f, 1.f } );

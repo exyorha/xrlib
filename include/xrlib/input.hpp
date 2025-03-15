@@ -348,7 +348,7 @@ namespace xrlib
 		/// </summary>
 		/// <param name="sUserPath">The user path to check (e.g. "/user/hand/left")</param>
 		/// <returns>Result of check the current interaction profile (controller) from the currently active openxr runtime</returns>
-		const char *GetCurrentInteractionProfile( const char *sUserPath );
+		const std::string &GetCurrentInteractionProfile( const char *sUserPath );
 
 		/// <summary>
 		/// generate a haptic pulse with the frequency, duration, amplitude and frequency provided - also have common default settigns for convenience

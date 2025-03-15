@@ -68,22 +68,32 @@ namespace xrlib::FB
 	{
 		m_pInstance = pInstance;
 
-		// Get flags if any
-		XrPassthroughFlagsFB flags = 0;
-		if ( pOtherInfo )
-		{
-			flags = *(static_cast< XrPassthroughFlagsFB * >( pOtherInfo ));
-		}
-
 		// Create passthrough objects
 		XrPassthroughCreateInfoFB xrPassthroughCI = { XR_TYPE_PASSTHROUGH_CREATE_INFO_FB };
-		xrPassthroughCI.flags = flags;
+		xrPassthroughCI.flags = 0;
 		XrResult xrResult = xrCreatePassthroughFB( session, &xrPassthroughCI, &m_fbPassthrough );
 
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 			LogError( GetName(), "Error - Unable to create fb passthrough: %s", XrEnumToString( xrResult ) );
 
-		flagSupportedLayerTypes.Set( (int) ELayerType::FULLSCREEN );
+		flagSupportedLayerTypes.Set( static_cast< int >( ELayerType::FULLSCREEN ) );
+		return xrResult;
+	}
+
+	XrResult CPassthrough::Init( XrSession session, CInstance *pInstance, XrPassthroughFlagsFB flags, void *pOtherInfo )
+	{
+		m_pInstance = pInstance;
+
+		// Create passthrough objects
+		XrPassthroughCreateInfoFB xrPassthroughCI = { XR_TYPE_PASSTHROUGH_CREATE_INFO_FB };
+		xrPassthroughCI.flags = flags;
+		xrPassthroughCI.next = pOtherInfo;
+		XrResult xrResult = xrCreatePassthroughFB( session, &xrPassthroughCI, &m_fbPassthrough );
+
+		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
+			LogError( GetName(), "Error - Unable to create fb passthrough: %s", XrEnumToString( xrResult ) );
+
+		flagSupportedLayerTypes.Set( static_cast< int >( flags ) );
 		return xrResult;
 	}
 
@@ -128,7 +138,7 @@ namespace xrlib::FB
 				xrPassthroughLayerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_RECONSTRUCTION_FB;
 				break;
 			case xrlib::ExtBase_Passthrough::ELayerType::MESH_PROJECTION:
-				xrPassthroughLayerCI.purpose = IsTriangleMeshSupported() ? XR_PASSTHROUGH_LAYER_PURPOSE_PROJECTED_FB : XR_PASSTHROUGH_LAYER_PURPOSE_MAX_ENUM_FB;
+				xrPassthroughLayerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_PROJECTED_FB;
 				break;
 			default:
 				xrPassthroughLayerCI.purpose = XR_PASSTHROUGH_LAYER_PURPOSE_MAX_ENUM_FB;
@@ -142,7 +152,7 @@ namespace xrlib::FB
 		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
 			m_vecPassthroughLayers.pop_back();
-			LogError( GetName(), "Error - unable to create requested passthrough layer of type (%i): %s", uint32_t ( eLayerType ), XrEnumToString( xrResult ) );
+			LogError( GetName(), "Error - unable to create requested passthrough layer of type (%i): %s", uint32_t( xrPassthroughLayerCI.purpose ), XrEnumToString( xrResult ) );
 			return xrResult;
 		}
 
@@ -451,18 +461,19 @@ namespace xrlib::FB
 		XrPassthroughLayerFB &layer, 
 		std::vector< XrVector3f > &vecVertices, 
 		std::vector< uint32_t > &vecIndices, 
-		XrSpace xrSpace, 
+		XrSpace baseSpace, 
+		XrTriangleMeshFlagsFB triFlags,
 		XrPosef xrPose, 
 		XrVector3f xrScale )
 	{
 		assert( IsTriangleMeshSupported() );
-		XR_RETURN_ON_ERROR( GetTriangleMesh()->AddGeometry( session, layer, vecVertices, vecIndices, xrSpace, xrPose, xrScale ) );
+		XR_RETURN_ON_ERROR( GetTriangleMesh()->AddGeometry( session, layer, vecVertices, vecIndices, triFlags ) );
 
 		XrGeometryInstanceFB xrGeometryInstance = XR_NULL_HANDLE;
 		XrGeometryInstanceCreateInfoFB xrGeomInstanceCI = { XR_TYPE_GEOMETRY_INSTANCE_CREATE_INFO_FB };
 		xrGeomInstanceCI.layer = layer;
 		xrGeomInstanceCI.mesh = GetTriangleMesh()->GetMeshes()->back();
-		xrGeomInstanceCI.baseSpace = xrSpace;
+		xrGeomInstanceCI.baseSpace = baseSpace;
 		xrGeomInstanceCI.pose = xrPose;
 		xrGeomInstanceCI.scale = xrScale;
 		XrResult xrResult = xrCreateGeometryInstanceFB( session, &xrGeomInstanceCI, &xrGeometryInstance );
@@ -479,10 +490,10 @@ namespace xrlib::FB
 		return XR_SUCCESS;
 	}
 
-	XrResult CPassthrough::UpdateGeometry( XrGeometryInstanceFB xrGeomInstance, XrSpace xrSpace, XrTime xrTime, XrPosef xrPose, XrVector3f xrScale ) 
+	XrResult CPassthrough::UpdateGeometry( XrGeometryInstanceFB xrGeomInstance, XrSpace baseSpace, XrTime xrTime, XrPosef xrPose, XrVector3f xrScale ) 
 	{ 
 		XrGeometryInstanceTransformFB xrGeomInstTransform = { XR_TYPE_GEOMETRY_INSTANCE_TRANSFORM_FB };
-		xrGeomInstTransform.baseSpace = xrSpace;
+		xrGeomInstTransform.baseSpace = baseSpace;
 		xrGeomInstTransform.time = xrTime;
 		xrGeomInstTransform.pose = xrPose;
 		xrGeomInstTransform.scale = xrScale;
