@@ -10,11 +10,12 @@
  * v1 & v2 licensed under MIT: https://opensource.org/license/mit
 */
 
-
 #include <xrlib/vulkan.hpp>
 #include <xrlib/common.hpp>
 #include <xrlib/utility_functions.hpp>
 
+#include <bluevk/BlueVK.h>
+using namespace bluevk;
 
 namespace xrlib
 {
@@ -85,7 +86,7 @@ namespace xrlib
 		XrVulkanInstanceCreateInfoKHR xrVulkanInstanceCreateInfo { XR_TYPE_VULKAN_INSTANCE_CREATE_INFO_KHR };
 		xrVulkanInstanceCreateInfo.next = pXrVkInstanceNext;
 		xrVulkanInstanceCreateInfo.systemId = GetAppInstance()->GetXrSystemId();
-		xrVulkanInstanceCreateInfo.pfnGetInstanceProcAddr = &vkGetInstanceProcAddr;
+		xrVulkanInstanceCreateInfo.pfnGetInstanceProcAddr = vkGetInstanceProcAddr;
 		xrVulkanInstanceCreateInfo.vulkanCreateInfo = &vkInstanceCreateInfo;
 		xrVulkanInstanceCreateInfo.vulkanAllocator = nullptr;
 
@@ -107,7 +108,8 @@ namespace xrlib
 			LogError( "Error creating vulkan instance with openxr result (%s) and vulkan result (%i)", XrEnumToString( xrResult ), (int32_t) vkResult );
 			return xrResult == XR_SUCCESS ? XR_ERROR_VALIDATION_FAILURE : xrResult;
 		}
-		
+
+		bindInstance( m_vkInstance );
 		LogInfo( XRLIB_NAME, "Vulkan instance successfully created." );
 
 		// Get the vulkan physical device (gpu) used by the runtime
@@ -300,7 +302,7 @@ namespace xrlib
 		XrVulkanDeviceCreateInfoKHR xrVulkanDeviceCreateInfo { XR_TYPE_VULKAN_DEVICE_CREATE_INFO_KHR };
 		xrVulkanDeviceCreateInfo.next = pXrLogicalDeviceNext;
 		xrVulkanDeviceCreateInfo.systemId = GetAppInstance()->GetXrSystemId();
-		xrVulkanDeviceCreateInfo.pfnGetInstanceProcAddr = &vkGetInstanceProcAddr;
+		xrVulkanDeviceCreateInfo.pfnGetInstanceProcAddr = vkGetInstanceProcAddr;
 		xrVulkanDeviceCreateInfo.vulkanCreateInfo = &vkLogicalDeviceCI;
 		xrVulkanDeviceCreateInfo.vulkanPhysicalDevice = m_vkPhysicalDevice;
 		xrVulkanDeviceCreateInfo.vulkanAllocator = nullptr;

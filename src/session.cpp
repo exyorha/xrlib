@@ -295,7 +295,8 @@ namespace xrlib
 		const float fNearZ,
 		const float fFarZ,
 		XrViewConfigurationType viewConfigurationType,
-		void *pNext ) 
+		void *pNext,
+		GraphicsAPI graphicsAPI) 
 	{ 
 		// @todo: debug assert only as this is called per frame - views and projections count *must* match
 		
@@ -309,7 +310,7 @@ namespace xrlib
 		XR_RETURN_ON_ERROR( xrLocateViews( m_xrSession, &xrFrameSpaceTimeInfo, outEyeViewsState, (uint32_t) outEyeViews.size(), &unFoundViews, outEyeViews.data() ) );
 
 		for ( uint32_t i = 0; i < outEyeViews.size(); i++ )
-			XrMatrix4x4f_CreateProjectionFov( &outEyeProjections[ i ], GRAPHICS_VULKAN, outEyeViews[ i ].fov, fNearZ, fFarZ );
+			XrMatrix4x4f_CreateProjectionFov( &outEyeProjections[ i ], graphicsAPI, outEyeViews[ i ].fov, fNearZ, fFarZ );
 
 		return XR_SUCCESS;
 	}

@@ -73,7 +73,8 @@ namespace xrlib
 			const float fNearZ = 0.1f,
 			const float fFarZ = 10000.f,
 			XrViewConfigurationType viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO, 
-			void *pNext = nullptr );
+			void *pNext = nullptr,
+			GraphicsAPI graphicsAPI = GRAPHICS_VULKAN);
 
 		XrResult AcquireFrameImage(
 			uint32_t *outImageIndex,

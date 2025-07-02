@@ -85,9 +85,14 @@ file(GLOB_RECURSE XRVK_HEADERS
 	)
 
 # Set source code
-file(GLOB_RECURSE XRLIB_SOURCE
+file(GLOB XRLIB_SOURCE
         "${XRLIB_SRC}/*.c*"
 	)
+file(GLOB_RECURSE XRLIB_SOURCE_EXT
+        "${XRLIB_SRC}/ext/*.c*"
+	)
+set(XRLIB_SOURCE ${XRLIB_SOURCE} "${XRLIB_SOURCE_EXT}")
+
 
 file(GLOB_RECURSE XRVK_SOURCE
         "${XRVK_SRC}/*.c*"
