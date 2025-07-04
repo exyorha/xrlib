@@ -272,9 +272,9 @@ namespace xrlib
 		// }
 
 		// Add multiview (required)
-		vkPhysicalDeviceFeatures.multiViewport = VK_TRUE;
-		vkPhysicalDeviceFeatures.sampleRateShading = VK_TRUE;
-		vecLogicalDeviceExtensions.push_back( VK_KHR_MULTIVIEW_EXTENSION_NAME );
+		//vkPhysicalDeviceFeatures.multiViewport = VK_TRUE;
+		///vkPhysicalDeviceFeatures.sampleRateShading = VK_TRUE;
+		//vecLogicalDeviceExtensions.push_back( VK_KHR_MULTIVIEW_EXTENSION_NAME );
 
 		std::vector< VkDeviceQueueCreateInfo > vecDeviceQueueCIs;
 		vecDeviceQueueCIs.push_back( vkDeviceQueueCI_Graphics );

@@ -288,8 +288,8 @@ set (ALLSOURCE
       ${XRLIB_CONFIG}
       ${XRLIB_CI}
       ${XRLIB_HEADERS} 
-      ${XRLIB_SOURCE} 
-      $<TARGET_OBJECTS:openxr_loader>    
+      ${XRLIB_SOURCE}
+      $<TARGET_OBJECTS:openxr_loader>
     )
 
 if(ENABLE_XRVK)
