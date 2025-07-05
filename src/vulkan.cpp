@@ -134,56 +134,36 @@ namespace xrlib
 	XrResult CVulkan::GetVulkanGraphicsRequirements() 
 	{ 
 		// Get the vulkan graphics requirements (min/max vulkan api version, etc) of the runtime
-		PFN_xrGetVulkanGraphicsRequirementsKHR xrGetVulkanGraphicsRequirementsKHR = nullptr;
-		XR_RETURN_ON_ERROR( INIT_PFN( GetAppInstance()->GetXrInstance(), xrGetVulkanGraphicsRequirementsKHR ) );
+		PFN_xrGetVulkanGraphicsRequirements2KHR xrGetVulkanGraphicsRequirements2KHR = nullptr;
+		XR_RETURN_ON_ERROR( INIT_PFN( GetAppInstance()->GetXrInstance(), xrGetVulkanGraphicsRequirements2KHR ) );
 
-		// We'll retrieve the Vulkan1 requirements and use it as the min/max vulkan api
-		XrGraphicsRequirementsVulkanKHR vulkan1Requirements { XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN_KHR };
-		XR_RETURN_ON_ERROR( xrGetVulkanGraphicsRequirementsKHR( GetAppInstance()->GetXrInstance(), GetAppInstance()->GetXrSystemId(), &vulkan1Requirements ) );
-		m_xrGraphicsRequirements.next = vulkan1Requirements.next;
-		m_xrGraphicsRequirements.minApiVersionSupported = vulkan1Requirements.minApiVersionSupported;
-		m_xrGraphicsRequirements.maxApiVersionSupported = vulkan1Requirements.maxApiVersionSupported;
+		m_xrGraphicsRequirements = XrGraphicsRequirementsVulkan2KHR{ XR_TYPE_GRAPHICS_REQUIREMENTS_VULKAN2_KHR };
+		XR_RETURN_ON_ERROR( xrGetVulkanGraphicsRequirements2KHR( GetAppInstance()->GetXrInstance(), GetAppInstance()->GetXrSystemId(), &m_xrGraphicsRequirements ) );
 
 		return XR_SUCCESS;
 	}
 
 	XrResult CVulkan::CreateVkInstance( VkResult &outVkResult, const XrInstance xrInstance, const XrVulkanInstanceCreateInfoKHR *xrVulkanInstanceCreateInfo ) 
 	{ 
-		// Check vulkan extensions required by the runtime
-		PFN_xrGetVulkanInstanceExtensionsKHR xrGetVulkanInstanceExtensionsKHR = nullptr;
-		XR_RETURN_ON_ERROR( INIT_PFN( xrInstance, xrGetVulkanInstanceExtensionsKHR ) );	
-		uint32_t unExtNum = 0;
-		XR_RETURN_ON_ERROR( xrGetVulkanInstanceExtensionsKHR( xrInstance, xrVulkanInstanceCreateInfo->systemId, 0, &unExtNum, nullptr ) );
+		PFN_xrCreateVulkanInstanceKHR xrCreateVulkanInstanceKHR = nullptr;
+		XR_RETURN_ON_ERROR( INIT_PFN( xrInstance, xrCreateVulkanInstanceKHR ) );
 
-		// Check number of extensions required by the runtime
-		std::vector< char > vecRuntimeExtensionNames( unExtNum );
-		XR_RETURN_ON_ERROR( xrGetVulkanInstanceExtensionsKHR( xrInstance, xrVulkanInstanceCreateInfo->systemId, unExtNum, &unExtNum, vecRuntimeExtensionNames.data() ) );
-
-		// Combine runtime and app extensions
-		std::vector< const char * > vecRuntimeExtensions = ConvertDelimitedCharArray( vecRuntimeExtensionNames.data(), ' ' );
-		for ( uint32_t i = 0; i < vecRuntimeExtensions.size(); ++i )
-		{
-			vecExtensions.push_back( vecRuntimeExtensions[ i ] );
-		}
-
-		VkInstanceCreateInfo vkInstanceCreateInfo { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
-		memcpy( &vkInstanceCreateInfo, xrVulkanInstanceCreateInfo->vulkanCreateInfo, sizeof( vkInstanceCreateInfo ) );
-		vkInstanceCreateInfo.enabledExtensionCount = (uint32_t) vecExtensions.size();
-		vkInstanceCreateInfo.ppEnabledExtensionNames = vecExtensions.empty() ? nullptr : vecExtensions.data();
-
-		auto pfnCreateInstance = (PFN_vkCreateInstance) xrVulkanInstanceCreateInfo->pfnGetInstanceProcAddr( nullptr, "vkCreateInstance" );
-		outVkResult = pfnCreateInstance( &vkInstanceCreateInfo, xrVulkanInstanceCreateInfo->vulkanAllocator, &m_vkInstance );
-
-		return XR_SUCCESS; 
+		return xrCreateVulkanInstanceKHR( xrInstance, xrVulkanInstanceCreateInfo, &m_vkInstance, &outVkResult );
 	}
 
 	XrResult CVulkan::GetVulkanGraphicsPhysicalDevice() 
 	{ 
 		assert( m_vkInstance != VK_NULL_HANDLE );
 
-		PFN_xrGetVulkanGraphicsDeviceKHR xrGetVulkanGraphicsDeviceKHR = nullptr;
-		XR_RETURN_ON_ERROR( INIT_PFN( GetAppInstance()->GetXrInstance(), xrGetVulkanGraphicsDeviceKHR ) );
-		XR_RETURN_ON_ERROR( xrGetVulkanGraphicsDeviceKHR( GetAppInstance()->GetXrInstance(), GetAppInstance()->GetXrSystemId(), m_vkInstance, &m_vkPhysicalDevice ) );
+		PFN_xrGetVulkanGraphicsDevice2KHR xrGetVulkanGraphicsDevice2KHR = nullptr;
+		XR_RETURN_ON_ERROR( INIT_PFN( GetAppInstance()->GetXrInstance(), xrGetVulkanGraphicsDevice2KHR ) );
+		XrVulkanGraphicsDeviceGetInfoKHR info{
+			.type = XR_TYPE_VULKAN_GRAPHICS_DEVICE_GET_INFO_KHR,
+			.systemId = GetAppInstance()->GetXrSystemId(),
+			.vulkanInstance = m_vkInstance
+		};
+
+		XR_RETURN_ON_ERROR( xrGetVulkanGraphicsDevice2KHR( GetAppInstance()->GetXrInstance(), &info, &m_vkPhysicalDevice ) );
 		return XR_SUCCESS;
 	}
 
@@ -355,46 +335,10 @@ namespace xrlib
 		assert( m_vkInstance != VK_NULL_HANDLE );
 		assert( m_vkPhysicalDevice != VK_NULL_HANDLE );
 
-		PFN_xrGetVulkanDeviceExtensionsKHR xrGetVulkanDeviceExtensionsKHR = nullptr;
-		XR_RETURN_ON_ERROR( INIT_PFN( GetAppInstance()->GetXrInstance(), xrGetVulkanDeviceExtensionsKHR ) );
+		PFN_xrCreateVulkanDeviceKHR xrCreateVulkanDeviceKHR;
+		XR_RETURN_ON_ERROR( INIT_PFN( GetAppInstance()->GetXrInstance(), xrCreateVulkanDeviceKHR ) );
 
-		// Get number of device extensions needed by the runtime
-		uint32_t unDeviceExtensionsNum = 0;
-		XR_RETURN_ON_ERROR( xrGetVulkanDeviceExtensionsKHR( GetAppInstance()->GetXrInstance(), xrVulkanDeviceCreateInfo->systemId, 0, &unDeviceExtensionsNum, nullptr ) );
-
-		std::vector< char > vecRuntimeLogicalDeviceExtensionNames( unDeviceExtensionsNum );
-		XR_RETURN_ON_ERROR( xrGetVulkanDeviceExtensionsKHR(
-			GetAppInstance()->GetXrInstance(), xrVulkanDeviceCreateInfo->systemId, unDeviceExtensionsNum, &unDeviceExtensionsNum, vecRuntimeLogicalDeviceExtensionNames.data() ) );
-
-		// Merge runtime and app's required extensions
-		std::vector< const char * > vecRuntimeLogicalDeviceExtensions = ConvertDelimitedCharArray( vecRuntimeLogicalDeviceExtensionNames.data(), ' ' );
-		for ( uint32_t i = 0; i < vecRuntimeLogicalDeviceExtensions.size(); ++i )
-		{
-			vecLogicalDeviceExtensions.push_back( vecRuntimeLogicalDeviceExtensions[ i ] );
-		}
-
-		memcpy( &vkPhysicalDeviceFeatures, xrVulkanDeviceCreateInfo->vulkanCreateInfo->pEnabledFeatures, sizeof( vkPhysicalDeviceFeatures ) );
-
-		#if !defined( XR_USE_PLATFORM_ANDROID )
-			// Mute validation error with Meta PC runtime
-			VkPhysicalDeviceFeatures metaRequiredFeatures {};
-			vkGetPhysicalDeviceFeatures( m_vkPhysicalDevice, &metaRequiredFeatures );
-			if ( metaRequiredFeatures.shaderStorageImageMultisample == VK_TRUE )
-			{
-				vkPhysicalDeviceFeatures.shaderStorageImageMultisample = VK_TRUE;
-			}
-		#endif
-
-		VkDeviceCreateInfo vkDeviceCreateInfo { VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
-		memcpy( &vkDeviceCreateInfo, xrVulkanDeviceCreateInfo->vulkanCreateInfo, sizeof( vkDeviceCreateInfo ) );
-		vkDeviceCreateInfo.pEnabledFeatures = &vkPhysicalDeviceFeatures;
-		vkDeviceCreateInfo.enabledExtensionCount = (uint32_t) vecLogicalDeviceExtensions.size();
-		vkDeviceCreateInfo.ppEnabledExtensionNames = vecLogicalDeviceExtensions.empty() ? nullptr : vecLogicalDeviceExtensions.data();
-
-		auto pfnCreateDevice = (PFN_vkCreateDevice) xrVulkanDeviceCreateInfo->pfnGetInstanceProcAddr( m_vkInstance, "vkCreateDevice" );
-		outVkResult = pfnCreateDevice( m_vkPhysicalDevice, &vkDeviceCreateInfo, xrVulkanDeviceCreateInfo->vulkanAllocator, &m_vkDevice );
-
-		return XR_SUCCESS;
+		return xrCreateVulkanDeviceKHR( GetAppInstance()->GetXrInstance(), xrVulkanDeviceCreateInfo, &m_vkDevice, &outVkResult );
 	}
 
 	VKAPI_ATTR VkBool32 VKAPI_CALL CVulkan::Callback_Debug(
