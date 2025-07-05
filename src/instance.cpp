@@ -323,25 +323,21 @@ namespace xrlib
 
 		if ( XR_UNQUALIFIED_SUCCESS( xrResult ) )
 		{
-			for ( std::vector< std::string >::iterator it = vecRequestedExtensionNames.begin(); it != vecRequestedExtensionNames.end(); )
-			{
+			auto it = std::remove_if(vecRequestedExtensionNames.begin(), vecRequestedExtensionNames.end(), [&vecSupportedExtensions](const std::string &name) -> bool {
+
 				// Find requested extension is the runtime's list of supported extensions
-				bool bFound = false;
 				for ( auto &sExtensionName : vecSupportedExtensions )
 				{
-					if ( sExtensionName == *it )
+					if ( sExtensionName == name )
 					{
-						bFound = true;
-						break;
+						return false;
 					}
 				}
 
-				// If the requested extension isn't found, delete it
-				if ( !bFound )
-				{
-					vecRequestedExtensionNames.erase( it );
-				}
-			}
+				return true;
+			});
+
+			vecRequestedExtensionNames.erase(it, vecRequestedExtensionNames.end());
 
 			// shrink the requested extension vector in case we needed to delete values from it
 			vecRequestedExtensionNames.shrink_to_fit();
@@ -355,25 +351,22 @@ namespace xrlib
 		std::vector< XrExtensionProperties > vecSupportedExtensions;
 		XR_RETURN_ON_ERROR( GetSupportedExtensions( vecSupportedExtensions ) )
 
-		for ( auto it = vecExtensionNames.begin(); it != vecExtensionNames.end(); it++ )
-		{
+		auto it = std::remove_if(vecExtensionNames.begin(), vecExtensionNames.end(), [&vecSupportedExtensions](const char *name) -> bool {
+
 			// Check if our requested extension exists
-			bool bFound = false;
 			for ( auto &supportedExt : vecSupportedExtensions )
 			{
-				if ( std::strcmp( supportedExt.extensionName, *it ) == 0 )
+				if ( std::strcmp( supportedExt.extensionName, name ) == 0 )
 				{
-					bFound = true;
-					break;
+					return false;
 				}
 			}
 
-			// If not supported by the current openxr runtime, then remove it from our list
-			if ( !bFound )
-			{
-				vecExtensionNames.erase( it-- );
-			}
-		}
+			return true;
+		});
+
+
+		vecExtensionNames.erase(it, vecExtensionNames.end());
 
 		return XR_SUCCESS;
 	}
@@ -383,25 +376,22 @@ namespace xrlib
 		std::vector< XrApiLayerProperties > vecSupportedApiLayers;
 		XR_RETURN_ON_ERROR( GetSupportedApiLayers( vecSupportedApiLayers ) )
 
-		for ( auto it = vecApiLayerNames.begin(); it != vecApiLayerNames.end(); it++ )
-		{
+		auto it = std::remove_if(vecApiLayerNames.begin(), vecApiLayerNames.end(), [&vecSupportedApiLayers](const char *name) -> bool {
+
 			// Check if our requested extension exists
-			bool bFound = false;
 			for ( auto &supportedApiLayer : vecSupportedApiLayers )
 			{
-				if ( std::strcmp( supportedApiLayer.layerName, *it ) == 0 )
+				if ( std::strcmp( supportedApiLayer.layerName, name ) == 0 )
 				{
-					bFound = true;
-					break;
+					return false;
 				}
 			}
 
 			// If not supported by the current openxr runtime, then remove it from our list
-			if ( !bFound )
-			{
-				vecApiLayerNames.erase( it-- );
-			}
-		}
+			return true;
+		});
+
+		vecApiLayerNames.erase(it, vecApiLayerNames.end());
 
 		return XR_SUCCESS;
 	}
@@ -411,25 +401,22 @@ namespace xrlib
 		// @todo - capture from openxr_platform.h
 		std::vector< const char * > vecUnsupportedGraphicsApis { "XR_KHR_opengl_enable", "XR_KHR_opengl_es_enable", "XR_KHR_D3D11_enable", "XR_KHR_D3D12_enable", "XR_MNDX_egl_enable" };
 
-		for ( auto it = vecExtensionNames.begin(); it != vecExtensionNames.end(); it++ )
-		{
+		auto it = std::remove_if(vecExtensionNames.begin(), vecExtensionNames.end(), [&vecUnsupportedGraphicsApis](const char *name) -> bool {
+
 			// Check if there's an unsupported graphics api in the input vector
-			bool bFound = false;
 			for ( auto &unsupportedExt : vecUnsupportedGraphicsApis )
 			{
-				if ( std::strcmp( unsupportedExt, *it ) == 0 )
+				if ( std::strcmp( unsupportedExt, name ) == 0 )
 				{
-					bFound = true;
-					break;
+					return true;
 				}
 			}
 
 			// If an unsupported graphics api is found in the list, then remove it
-			if ( bFound )
-			{
-				vecExtensionNames.erase( it-- );
-			}
-		}
+			return false;
+		});
+
+		vecExtensionNames.erase(it, vecExtensionNames.end());
 	}
 
 	std::vector< XrViewConfigurationType > CInstance::GetSupportedViewConfigurations() 
