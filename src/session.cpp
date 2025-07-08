@@ -42,10 +42,11 @@ namespace xrlib
 
 	XrResult CSession::Init( SSessionSettings &settings ) 
 	{ 
+
+		VkPhysicalDeviceVulkan11Features vkPhysicalFeatures11 { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 		// Enable multiview rendering
 		if ( settings.bUseMultiviewRendering )
 		{
-			VkPhysicalDeviceVulkan11Features vkPhysicalFeatures11 { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 			vkPhysicalFeatures11.multiview = VK_TRUE;
 
 			if ( settings.pVkLogicalDeviceNext )
@@ -62,12 +63,12 @@ namespace xrlib
 		// Init rendering
 		return Init(
 			settings.pSurface,
-			settings.flgAdditionalCreateInfo, 
-			settings.pVkInstanceNext, 
-			settings.pXrVkInstanceNext, 
-			settings.pVkLogicalDeviceNext, 
+			settings.flgAdditionalCreateInfo,
+			settings.pVkInstanceNext,
+			settings.pXrVkInstanceNext,
+			settings.pVkLogicalDeviceNext,
 			settings.pXrLogicalDeviceNext
-		); 
+		);
 	}
 
 	XrResult CSession::Init(
