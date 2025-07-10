@@ -204,6 +204,10 @@ namespace xrlib
 			{
 				m_vkQueueIndex_GraphicsFamily = vkDeviceQueueCI_Graphics.queueFamilyIndex = i;
 				bGraphicsFamilyFound = true;
+
+				if (vecQueueFamilyProps[i].queueCount >= 2) {
+					vkDeviceQueueCI_Graphics.queueCount = 2;
+				}
 			}
 
 			// Find an appropriate transfer queue
@@ -301,6 +305,15 @@ namespace xrlib
 		// Get device queue(s)
 		vkGetDeviceQueue( m_vkDevice, m_vkQueueIndex_GraphicsFamily, 0, &m_vkQueue_Graphics );
 		
+		if (vkDeviceQueueCI_Graphics.queueCount == 1) {
+			m_vkQueueIndex_Graphics_Synchronization = 0;
+			m_vkQueue_Graphics_Synchronization = m_vkQueue_Graphics;
+		}
+		else {
+			m_vkQueueIndex_Graphics_Synchronization = 1;
+			vkGetDeviceQueue(m_vkDevice, m_vkQueueIndex_GraphicsFamily, 0, &m_vkQueue_Graphics_Synchronization);
+		}
+
 		if ( !bTransferIsSameAsGraphics )
 		{
 			vkGetDeviceQueue( m_vkDevice, m_vkQueueIndex_TransferFamily, 0, &m_vkQueue_Transfer );
@@ -324,7 +337,7 @@ namespace xrlib
 		m_xrGraphicsBinding.physicalDevice = m_vkPhysicalDevice;
 		m_xrGraphicsBinding.device = m_vkDevice;
 		m_xrGraphicsBinding.queueFamilyIndex = m_vkQueueIndex_GraphicsFamily;
-		m_xrGraphicsBinding.queueIndex = m_vkQueueIndex_Graphics;
+		m_xrGraphicsBinding.queueIndex = m_vkQueueIndex_Graphics_Synchronization;
 
 		return XR_SUCCESS;
 	}

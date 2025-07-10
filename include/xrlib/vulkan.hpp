@@ -82,8 +82,10 @@ namespace xrlib
 		const VkDevice GetVkLogicalDevice() { return m_vkDevice; }
 
 		const VkQueue GetVkQueue_Graphics(){ return m_vkQueue_Graphics; }
+		const VkQueue GetVkQueue_Graphics_Synchronization() { return m_vkQueue_Graphics_Synchronization; }
 		const uint32_t GetVkQueueIndex_GraphicsFamily() { return m_vkQueueIndex_GraphicsFamily; }
 		const uint32_t GetVkQueueIndex_Graphics() { return m_vkQueueIndex_Graphics; }
+		const uint32_t GetVkQueueIndex_Graphics_Synchronization() { return m_vkQueueIndex_Graphics_Synchronization; }
 
 		const VkQueue GetVkQueue_Transfer() { return m_vkQueue_Transfer; }
 		const uint32_t GetVkQueueIndex_TransferFamily() { return m_vkQueueIndex_TransferFamily; }
@@ -106,8 +108,10 @@ namespace xrlib
 		VkDevice m_vkDevice = VK_NULL_HANDLE;
 
 		VkQueue m_vkQueue_Graphics = VK_NULL_HANDLE;
+		VkQueue m_vkQueue_Graphics_Synchronization = VK_NULL_HANDLE;
 		uint32_t m_vkQueueIndex_GraphicsFamily = 0;
 		uint32_t m_vkQueueIndex_Graphics = 0;
+		uint32_t m_vkQueueIndex_Graphics_Synchronization = 0;
 
 		VkQueue m_vkQueue_Transfer = VK_NULL_HANDLE;
 		uint32_t m_vkQueueIndex_TransferFamily = 0;
