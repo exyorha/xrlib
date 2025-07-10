@@ -74,12 +74,12 @@ namespace xrlib
 		if ( !StringCopy(instanceCI.applicationInfo.applicationName, XR_MAX_APPLICATION_NAME_SIZE, m_sAppName ) )
 			return xrResult;
 
-		if ( !StringCopy( instanceCI.applicationInfo.engineName, XR_MAX_ENGINE_NAME_SIZE, XRLIB_NAME ) )
+		if ( !StringCopy( instanceCI.applicationInfo.engineName, XR_MAX_ENGINE_NAME_SIZE, "" ) )
 			return xrResult;
 
 		instanceCI.applicationInfo.applicationVersion = m_unAppVersion;
-		instanceCI.applicationInfo.engineVersion = XR_MAKE_VERSION32( XRLIB_VERSION_MAJOR, XRLIB_VERSION_MINOR, XRLIB_VERSION_PATCH );
-		instanceCI.applicationInfo.apiVersion = XR_MAKE_VERSION( 1, 0, 0 ); // XR_CURRENT_API_VERSION;
+		instanceCI.applicationInfo.engineVersion = 0;
+		instanceCI.applicationInfo.apiVersion = XR_MAKE_VERSION( 1, 0, 24 ); // XR_CURRENT_API_VERSION;
 
 		// Retrieve the supported extensions by the runtime
 		std::vector< XrExtensionProperties > vecExtensionProperties;
