@@ -21,7 +21,7 @@
 #include <cassert>
 #include <cmath>
 #include <future>
-#include <bluevk/BlueVK.h>
+#include <volk.h>
 
 #ifndef M_PI
 	#define M_PI 3.14159265358979323846

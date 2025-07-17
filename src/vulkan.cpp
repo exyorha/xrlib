@@ -14,8 +14,7 @@
 #include <xrlib/common.hpp>
 #include <xrlib/utility_functions.hpp>
 
-#include <bluevk/BlueVK.h>
-using namespace bluevk;
+#include <volk.h>
 
 namespace xrlib
 {
@@ -109,7 +108,7 @@ namespace xrlib
 			return xrResult == XR_SUCCESS ? XR_ERROR_VALIDATION_FAILURE : xrResult;
 		}
 
-		bindInstance( m_vkInstance );
+		volkLoadInstance( m_vkInstance );
 		LogInfo( XRLIB_NAME, "Vulkan instance successfully created." );
 
 		// Get the vulkan physical device (gpu) used by the runtime
@@ -297,6 +296,8 @@ namespace xrlib
 		}
 
 		LogInfo( XRLIB_NAME, "Vulkan (logical) device successfully created." );
+
+		volkLoadDevice(m_vkDevice);
 
 		// Get device queue(s)
 		vkGetDeviceQueue( m_vkDevice, m_vkQueueIndex_GraphicsFamily, 0, &m_vkQueue_Graphics );
