@@ -21,7 +21,6 @@
 #include <cassert>
 #include <cmath>
 #include <future>
-#include <volk.h>
 
 #ifndef M_PI
 	#define M_PI 3.14159265358979323846
@@ -36,6 +35,11 @@
 	#include <jni.h>
 	#include <sys/system_properties.h>
 #endif
+
+#ifndef VK_NO_PROTOTYPES
+#define VK_NO_PROTOTYPES
+#endif
+#include <vulkan/vulkan.h>
 
 // Openxr headers
 #include <third_party/openxr/include/openxr/openxr.h>

@@ -21,24 +21,16 @@ namespace xrlib
 {
 	struct SSessionSettings
 	{
-		bool bUseMultiviewRendering = true;
-		VkSurfaceKHR *pSurface = nullptr;
 		XrSessionCreateFlags flgAdditionalCreateInfo = 0;
-		void *pVkInstanceNext = nullptr;
-		void *pXrVkInstanceNext = nullptr;
-		void *pVkLogicalDeviceNext = nullptr;
-		void *pXrLogicalDeviceNext = nullptr;
+		void* pXrSessionNext = nullptr;
 	};
 
 	class CInstance;
-	class CVulkan;
 	class CSession
 	{
 	  public:
 		CSession( CInstance *pInstance );
 		~CSession();
-
-		friend class CVulkan;
 
 		XrPosef xrAppReferencePose { { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } };
 		XrReferenceSpaceType xrAppReferenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
@@ -46,14 +38,9 @@ namespace xrlib
 
 		XrResult Init( SSessionSettings &settings );
 		XrResult Init(
-			VkSurfaceKHR *pSurface = nullptr,
 			XrSessionCreateFlags flgAdditionalCreateInfo = 0,
-			void *pVkInstanceNext = nullptr,
-			void *pXrVkInstanceNext = nullptr,
-			void *pVkLogicalDeviceNext = nullptr,
-			void *pXrLogicalDeviceNext = nullptr );
+			void * pXrSessionNext = nullptr);
 
-		XrResult InitVulkan( VkSurfaceKHR *pSurface = nullptr, void *pVkInstanceNext = nullptr, void *pXrVkInstanceNext = nullptr, void *pVkLogicalDeviceNext = nullptr, void *pXrLogicalDeviceNext = nullptr );
 		XrResult CreateXrSession( XrSessionCreateFlags flgAdditionalCreateInfo = 0, void *pNext = nullptr );
 		XrResult CreateAppSpace( XrPosef referencePose, XrReferenceSpaceType referenceSpaceType, void *pNext = nullptr );
 		XrResult CreateHmdSpace( XrPosef referencePose, void *pNext = nullptr );
@@ -114,11 +101,9 @@ namespace xrlib
 
 		std::vector< XrReferenceSpaceType > GetSupportedReferenceSpaceTypes();
 		XrResult GetSupportedTextureFormats( std::vector< int64_t > &outSupportedFormats );
-		int64_t SelectColorTextureFormat( const std::vector< int64_t > &vecRequestedFormats );
-		int64_t SelectDepthTextureFormat( const std::vector< int64_t > &vecRequestedFormats );
+		int64_t SelectSupportedTextureFormat( const std::vector< int64_t > &vecRequestedFormats );
 
 		CInstance *GetAppInstance() { return m_pInstance;  }
-		CVulkan *GetVulkan() { return m_pVulkan; }
 		const XrSession GetXrSession() { return m_xrSession; }
 		const XrSessionState GetState() { return m_xrSessionState; }
 		const XrSpace GetAppSpace() { return m_xrAppSpace; }
@@ -130,7 +115,6 @@ namespace xrlib
 
 	  private:
 		CInstance *m_pInstance = nullptr;
-		CVulkan *m_pVulkan = nullptr;
 
 		XrSession m_xrSession = XR_NULL_HANDLE;
 		XrSessionState m_xrSessionState = XR_SESSION_STATE_UNKNOWN;

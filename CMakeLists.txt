@@ -239,14 +239,6 @@ endif()
 # BUILD THIRD PARTY DEPENDENCIES #
 ##################################
 
-# Add cmake known packages
-find_package(Vulkan)
-if(NOT Vulkan_FOUND)
-	message(FATAL_ERROR "[${XRLIB}] ERROR: Unable to find Vulkan library - install the Vulkan SDK from https://vulkan.lunarg.com/")
-else()
-	message(STATUS "[${XRLIB}] Vulkan library loaded: ${Vulkan_LIBRARY}")
-endif()
-
 # Add openxr
 add_subdirectory(${OPENXR_ROOT})
 
@@ -312,6 +304,8 @@ else()
     add_library(${XRLIB} SHARED ${ALLSOURCE})
     message(STATUS "[${XRLIB}] Project library defined. Will build as: SHARED")
 endif()
+
+target_link_libraries(${XRLIB} PUBLIC Vulkan::Headers)
 
 # For shared library builds, set project version
 if(NOT BUILD_AS_STATIC)

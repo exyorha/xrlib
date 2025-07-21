@@ -12,7 +12,6 @@
 
 
 #include <xrlib/session.hpp>
-#include <xrlib/vulkan.hpp>
 #include <array>
 
 namespace xrlib
@@ -22,7 +21,6 @@ namespace xrlib
 	{
 		assert( pInstance );
 
-		m_pVulkan = new CVulkan( this );
 	}
 
 	CSession::~CSession() 
@@ -35,72 +33,24 @@ namespace xrlib
 
 		if ( m_xrSession != XR_NULL_HANDLE )
 			xrDestroySession( m_xrSession );
-
-		if ( m_pVulkan )
-			delete m_pVulkan;
 	}
 
 	XrResult CSession::Init( SSessionSettings &settings ) 
 	{ 
-
-		VkPhysicalDeviceVulkan11Features vkPhysicalFeatures11 { VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
-		// Enable multiview rendering
-		if ( settings.bUseMultiviewRendering )
-		{
-			vkPhysicalFeatures11.multiview = VK_TRUE;
-
-			if ( settings.pVkLogicalDeviceNext )
-			{
-				vkPhysicalFeatures11.pNext = settings.pVkLogicalDeviceNext;
-				settings.pVkLogicalDeviceNext = &vkPhysicalFeatures11;
-			}
-			else
-			{
-				settings.pVkLogicalDeviceNext = &vkPhysicalFeatures11;
-			}
-		}
-
 		// Init rendering
 		return Init(
-			settings.pSurface,
 			settings.flgAdditionalCreateInfo,
-			settings.pVkInstanceNext,
-			settings.pXrVkInstanceNext,
-			settings.pVkLogicalDeviceNext,
-			settings.pXrLogicalDeviceNext
+			settings.pXrSessionNext
 		);
 	}
 
 	XrResult CSession::Init(
-		VkSurfaceKHR *pSurface,
 		XrSessionCreateFlags flgAdditionalCreateInfo,
-		void *pVkInstanceNext,
-		void *pXrVkInstanceNext,
-		void *pVkLogicalDeviceNext,
-		void *pXrLogicalDeviceNext ) 
+		void *pXrSessionNext ) 
 	{ 
-		XR_RETURN_ON_ERROR( InitVulkan( pSurface, pVkInstanceNext, pXrVkInstanceNext, pVkLogicalDeviceNext, pXrLogicalDeviceNext ) );
-		XR_RETURN_ON_ERROR( CreateXrSession( flgAdditionalCreateInfo ) );
+		XR_RETURN_ON_ERROR( CreateXrSession( flgAdditionalCreateInfo, pXrSessionNext) );
 		XR_RETURN_ON_ERROR( CreateAppSpace( xrAppReferencePose, xrAppReferenceSpaceType ) );
 		XR_RETURN_ON_ERROR( CreateHmdSpace( xrAppReferencePose ) );
-
-		return XR_SUCCESS;
-	}
-
-	XrResult
-		CSession::InitVulkan( 
-			VkSurfaceKHR *pSurface, 
-			void *pVkInstanceNext, 
-			void *pXrVkInstanceNext, 
-			void *pVkLogicalDeviceNext, 
-			void *pXrLogicalDeviceNext ) 
-	{ 
-		XrResult xrResult = m_pVulkan->Init( pSurface, pVkInstanceNext, pXrVkInstanceNext, pVkLogicalDeviceNext, pXrLogicalDeviceNext );
-		if ( !XR_UNQUALIFIED_SUCCESS( xrResult ) )
-		{
-			LogError( XRLIB_NAME, "Unable to initialize Vulkan resources: %s", XrEnumToString( xrResult ) );
-			return xrResult;
-		}
 
 		return XR_SUCCESS;
 	}
@@ -108,13 +58,11 @@ namespace xrlib
 	XrResult CSession::CreateXrSession( XrSessionCreateFlags flgAdditionalCreateInfo, void *pNext ) 
 	{ 
 		// Check if there's a valid openxr instance
-		if ( GetAppInstance()->GetXrSystemId() == XR_NULL_SYSTEM_ID || m_pVulkan->GetGraphicsBinding()->device == VK_NULL_HANDLE )
+		if ( GetAppInstance()->GetXrSystemId() == XR_NULL_SYSTEM_ID )
 			return XR_ERROR_CALL_ORDER_INVALID;
 
-		m_pVulkan->GetGraphicsBinding()->next = pNext;
-
 		XrSessionCreateInfo xrSessionCreateInfo { XR_TYPE_SESSION_CREATE_INFO };
-		xrSessionCreateInfo.next = m_pVulkan->GetGraphicsBinding();
+		xrSessionCreateInfo.next = pNext;
 		xrSessionCreateInfo.systemId = GetAppInstance()->GetXrSystemId();
 		xrSessionCreateInfo.createFlags = flgAdditionalCreateInfo;
 
@@ -479,7 +427,7 @@ namespace xrlib
 		return XR_SUCCESS;
 	}
 
-	int64_t CSession::SelectColorTextureFormat( const std::vector< int64_t > &vecRequestedFormats ) 
+	int64_t CSession::SelectSupportedTextureFormat( const std::vector< int64_t > &vecRequestedFormats ) 
 	{ 
 		// Check if session was initialized correctly
 		if ( m_xrSession == XR_NULL_HANDLE )
@@ -496,8 +444,7 @@ namespace xrlib
 			// Get first format
 			for ( auto textureFormat : vecSupportedFormats )
 			{
-				if ( !m_pVulkan->IsDepthFormat( (VkFormat) textureFormat ) )		
-					return textureFormat;
+				return textureFormat;
 			}
 		}
 		else
@@ -505,50 +452,6 @@ namespace xrlib
 			// Find matching texture format with runtime's supported ones
 			for ( auto supportedFormat : vecSupportedFormats )
 			{
-				if ( m_pVulkan->IsDepthFormat( (VkFormat) supportedFormat ) )
-					continue;
-
-				for ( auto requestedFormat : vecRequestedFormats )
-				{
-					// Return selected format if a match is found
-					if ( requestedFormat == supportedFormat )
-						return supportedFormat;
-				}
-			}
-		}
-
-		return 0;
-	}
-
-	int64_t CSession::SelectDepthTextureFormat( const std::vector< int64_t > &vecRequestedFormats ) 
-	{ 
-		// Check if session was initialized correctly
-		if ( m_xrSession == XR_NULL_HANDLE )
-			return XR_ERROR_CALL_ORDER_INVALID;
-
-		// Retrieve this session's supported formats
-		std::vector< int64_t > vecSupportedFormats;
-		if ( !XR_UNQUALIFIED_SUCCESS( GetSupportedTextureFormats( vecSupportedFormats ) ) )
-			return 0;
-
-		// If there are no requested texture formats, choose the first one from the runtime
-		if ( vecRequestedFormats.empty() )
-		{
-			// Get first format
-			for ( auto textureFormat : vecSupportedFormats )
-			{
-				if ( m_pVulkan->IsDepthFormat( (VkFormat) textureFormat ) )
-					return textureFormat;
-			}
-		}
-		else
-		{
-			// Find matching texture format with runtime's supported ones
-			for ( auto supportedFormat : vecSupportedFormats )
-			{
-				if ( !m_pVulkan->IsDepthFormat( (VkFormat) supportedFormat ) )
-					continue;
-
 				for ( auto requestedFormat : vecRequestedFormats )
 				{
 					// Return selected format if a match is found
