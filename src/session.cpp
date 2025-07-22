@@ -50,7 +50,7 @@ namespace xrlib
 	{ 
 		XR_RETURN_ON_ERROR( CreateXrSession( flgAdditionalCreateInfo, pXrSessionNext) );
 		XR_RETURN_ON_ERROR( CreateAppSpace( xrAppReferencePose, xrAppReferenceSpaceType ) );
-		XR_RETURN_ON_ERROR( CreateHmdSpace( xrAppReferencePose ) );
+		XR_RETURN_ON_ERROR( CreateHmdSpace( xrHmdReferencePose ) );
 
 		return XR_SUCCESS;
 	}

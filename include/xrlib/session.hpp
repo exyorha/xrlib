@@ -33,6 +33,7 @@ namespace xrlib
 		~CSession();
 
 		XrPosef xrAppReferencePose { { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } };
+		XrPosef xrHmdReferencePose{ { 0.f, 0.f, 0.f, 1.f }, { 0.f, 0.f, 0.f } };
 		XrReferenceSpaceType xrAppReferenceSpaceType = XR_REFERENCE_SPACE_TYPE_STAGE;
 		XrViewConfigurationType xrViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
 
